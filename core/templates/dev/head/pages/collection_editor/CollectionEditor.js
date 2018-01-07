@@ -25,13 +25,16 @@ oppia.constant(
 oppia.constant(
   'COLLECTION_RIGHTS_URL_TEMPLATE',
   '/collection_editor_handler/rights/<collection_id>');
-oppia.constant(
-  'EXPLORATION_SUMMARY_DATA_URL_TEMPLATE', '/explorationsummarieshandler/data');
 
 oppia.constant(
   'COLLECTION_TITLE_INPUT_FOCUS_LABEL', 'collectionTitleInputFocusLabel');
 
-oppia.controller('CollectionEditor', ['CollectionEditorStateService',
+oppia.constant(
+  'SEARCH_EXPLORATION_URL_TEMPLATE',
+  '/exploration/metadata_search?q=<query>');
+
+oppia.controller('CollectionEditor', [
+  'CollectionEditorStateService',
   function(CollectionEditorStateService) {
     // Load the collection to be edited.
     CollectionEditorStateService.loadCollection(GLOBALS.collectionId);

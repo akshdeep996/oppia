@@ -19,19 +19,21 @@
 
 // HTML bind directive that trusts the value it is given and also evaluates
 // custom directive tags in the provided value.
-oppia.directive('angularHtmlBind', ['$compile', '$timeout',
-  'EVENT_HTML_CHANGED', function($compile, $timeout, EVENT_HTML_CHANGED) {
+oppia.directive('angularHtmlBind', ['$compile', function($compile) {
   return {
     restrict: 'A',
     link: function(scope, elm, attrs) {
+      // Clean up old scopes if the html changes.
+      // Reference: https://stackoverflow.com/a/42927814
+      var newScope;
       scope.$watch(attrs.angularHtmlBind, function(newValue) {
-        // Inform child components that the value of the HTML string has
-        // changed, so that they can perform any necessary cleanup.
-        scope.$broadcast(EVENT_HTML_CHANGED);
-        $timeout(function() {
-          elm.html(newValue);
-          $compile(elm.contents())(scope);
-        }, 10);
+        if (newScope) {
+          newScope.$destroy();
+        }
+        elm.empty();
+        newScope = scope.$new();
+        elm.html(newValue);
+        $compile(elm.contents())(newScope);
       });
     }
   };
@@ -129,10 +131,10 @@ oppia.directive('mobileFriendlyTooltip', ['$timeout', function($timeout) {
   return {
     restrict: 'A',
     scope: true,
-    controller: ['$scope', 'deviceInfoService', function(
-        $scope, deviceInfoService) {
+    controller: ['$scope', 'DeviceInfoService', function(
+        $scope, DeviceInfoService) {
       $scope.opened = false;
-      $scope.deviceHasTouchEvents = deviceInfoService.hasTouchEvents();
+      $scope.deviceHasTouchEvents = DeviceInfoService.hasTouchEvents();
     }],
     link: function(scope, element) {
       var TIME_TOOLTIP_CLOSE_DELAY_MOBILE = 1000;
@@ -158,7 +160,7 @@ oppia.directive('mobileFriendlyTooltip', ['$timeout', function($timeout) {
           scope.opened = false;
           scope.$apply();
         });
-      };
+      }
     }
   };
 }]);

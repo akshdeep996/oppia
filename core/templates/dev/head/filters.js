@@ -120,9 +120,9 @@ oppia.filter('truncateAtFirstEllipsis', [function() {
 }]);
 
 oppia.filter('wrapTextWithEllipsis', [
-  '$filter', 'utilsService', function($filter, utilsService) {
+  '$filter', 'UtilsService', function($filter, UtilsService) {
     return function(input, characterCount) {
-      if (utilsService.isString(input)) {
+      if (UtilsService.isString(input)) {
         input = $filter('normalizeWhitespace')(input);
         if (input.length <= characterCount || characterCount < 3) {
           // String fits within the criteria; no wrapping is necessary.
@@ -139,126 +139,114 @@ oppia.filter('wrapTextWithEllipsis', [
   }
 ]);
 
-// Filter that returns true iff an outcome has a self-loop and no feedback.
-oppia.filter('isOutcomeConfusing', [function() {
-  return function(outcome, currentStateName) {
-    return (
-      outcome.dest === currentStateName &&
-      !outcome.feedback.some(function(feedbackItem) {
-        return feedbackItem.trim().length > 0;
-      })
-    );
-  };
-}]);
-
 // Filter that changes {{...}} tags into the corresponding parameter input
 // values. Note that this returns an HTML string to accommodate the case of
 // multiple-choice input and image-click input.
 oppia.filter('parameterizeRuleDescription', [
-    'INTERACTION_SPECS', function(INTERACTION_SPECS) {
-  return function(rule, interactionId, choices) {
-    if (!rule) {
-      return '';
-    }
-
-    if (!INTERACTION_SPECS.hasOwnProperty(interactionId)) {
-      console.error('Cannot find interaction with id ' + interactionId);
-      return '';
-    }
-
-    var description = INTERACTION_SPECS[interactionId].rule_descriptions[
-      rule.rule_type];
-    if (!description) {
-      console.error(
-        'Cannot find description for rule ' + rule.rule_type +
-        ' for interaction ' + interactionId);
-      return '';
-    }
-
-    var inputs = rule.inputs;
-    var finalDescription = description;
-
-    var PATTERN = /\{\{\s*(\w+)\s*(\|\s*\w+\s*)?\}\}/;
-    var iter = 0;
-    while (true) {
-      if (!description.match(PATTERN) || iter === 100) {
-        break;
-      }
-      iter++;
-
-      var varName = description.match(PATTERN)[1];
-      var varType = description.match(PATTERN)[2];
-      if (varType) {
-        varType = varType.substring(1);
+  'INTERACTION_SPECS', function(INTERACTION_SPECS) {
+    return function(rule, interactionId, choices) {
+      if (!rule) {
+        return '';
       }
 
-      var replacementText = '[INVALID]';
-      // Special case for MultipleChoiceInput, ImageClickInput, and
-      // ItemSelectionInput.
-      if (choices) {
-        if (varType === 'SetOfHtmlString') {
-          replacementText = '[';
-          var key = inputs[varName];
-          for (var i = 0; i < key.length; i++) {
-            replacementText += key[i];
-            if (i < key.length - 1) {
-              replacementText += ',';
+      if (!INTERACTION_SPECS.hasOwnProperty(interactionId)) {
+        console.error('Cannot find interaction with id ' + interactionId);
+        return '';
+      }
+      var description = INTERACTION_SPECS[interactionId].rule_descriptions[
+        rule.type];
+      if (!description) {
+        console.error(
+          'Cannot find description for rule ' + rule.type +
+          ' for interaction ' + interactionId);
+        return '';
+      }
+
+      var inputs = rule.inputs;
+      var finalDescription = description;
+
+      var PATTERN = /\{\{\s*(\w+)\s*(\|\s*\w+\s*)?\}\}/;
+      var iter = 0;
+      while (true) {
+        if (!description.match(PATTERN) || iter === 100) {
+          break;
+        }
+        iter++;
+
+        var varName = description.match(PATTERN)[1];
+        var varType = description.match(PATTERN)[2];
+        if (varType) {
+          varType = varType.substring(1);
+        }
+
+        var replacementText = '[INVALID]';
+        // Special case for MultipleChoiceInput, ImageClickInput, and
+        // ItemSelectionInput.
+        if (choices) {
+          if (varType === 'SetOfHtmlString') {
+            replacementText = '[';
+            var key = inputs[varName];
+            for (var i = 0; i < key.length; i++) {
+              replacementText += key[i];
+              if (i < key.length - 1) {
+                replacementText += ',';
+              }
             }
+            replacementText += ']';
+          } else {
+            // The following case is for MultipleChoiceInput
+            for (var i = 0; i < choices.length; i++) {
+              if (choices[i].val === inputs[varName]) {
+                replacementText = '\'' + choices[i].label + '\'';
+              }
+            }
+          }
+          // TODO(sll): Generalize this to use the inline string representation
+          // of an object type.
+        } else if (varType === 'MusicPhrase') {
+          replacementText = '[';
+          for (var i = 0; i < inputs[varName].length; i++) {
+            if (i !== 0) {
+              replacementText += ', ';
+            }
+            replacementText += inputs[varName][i].readableNoteName;
           }
           replacementText += ']';
+        } else if (varType === 'CoordTwoDim') {
+          var latitude = inputs[varName][0] || 0.0;
+          var longitude = inputs[varName][1] || 0.0;
+          replacementText = '(';
+          replacementText += (
+            inputs[varName][0] >= 0.0 ?
+            latitude.toFixed(2) + '°N' :
+            -latitude.toFixed(2) + '°S');
+          replacementText += ', ';
+          replacementText += (
+            inputs[varName][1] >= 0.0 ?
+            longitude.toFixed(2) + '°E' :
+            -longitude.toFixed(2) + '°W');
+          replacementText += ')';
+        } else if (varType === 'NormalizedString') {
+          replacementText = '"' + inputs[varName] + '"';
+        } else if (varType === 'Graph') {
+          replacementText = '[reference graph]';
         } else {
-          // The following case is for MultipleChoiceInput
-          for (var i = 0; i < choices.length; i++) {
-            if (choices[i].val === inputs[varName]) {
-              replacementText = '\'' + choices[i].label + '\'';
-            }
-          }
+          replacementText = inputs[varName];
         }
-        // TODO(sll): Generalize this to use the inline string representation of
-        // an object type.
-      } else if (varType === 'MusicPhrase') {
-        replacementText = '[';
-        for (var i = 0; i < inputs[varName].length; i++) {
-          if (i !== 0) {
-            replacementText += ', ';
-          }
-          replacementText += inputs[varName][i].readableNoteName;
-        }
-        replacementText += ']';
-      } else if (varType === 'CoordTwoDim') {
-        var latitude = inputs[varName][0] || 0.0;
-        var longitude = inputs[varName][1] || 0.0;
-        replacementText = '(';
-        replacementText += (
-          inputs[varName][0] >= 0.0 ?
-          latitude.toFixed(2) + '°N' :
-          -latitude.toFixed(2) + '°S');
-        replacementText += ', ';
-        replacementText += (
-          inputs[varName][1] >= 0.0 ?
-          longitude.toFixed(2) + '°E' :
-          -longitude.toFixed(2) + '°W');
-        replacementText += ')';
-      } else if (varType === 'NormalizedString') {
-        replacementText = '"' + inputs[varName] + '"';
-      } else if (varType === 'Graph') {
-        replacementText = '[reference graph]';
-      } else {
-        replacementText = inputs[varName];
-      }
 
-      description = description.replace(PATTERN, ' ');
-      finalDescription = finalDescription.replace(PATTERN, replacementText);
-    }
-    return finalDescription;
-  };
-}]);
+        description = description.replace(PATTERN, ' ');
+        finalDescription = finalDescription.replace(PATTERN, replacementText);
+      }
+      return finalDescription;
+    };
+  }
+]);
 
 // Filter that removes whitespace from the beginning and end of a string, and
 // replaces interior whitespace with a single space character.
-oppia.filter('normalizeWhitespace', ['utilsService', function(utilsService) {
+oppia.filter('normalizeWhitespace', ['UtilsService', function(UtilsService) {
   return function(input) {
-    if (utilsService.isString(input)) {
+    if (UtilsService.isString(input)) {
       // Remove whitespace from the beginning and end of the string, and
       // replace interior whitespace with a single space character.
       input = input.trim();
@@ -317,7 +305,8 @@ oppia.filter('normalizeWhitespacePunctuationAndCase', [function() {
 oppia.filter('convertToPlainText', [function() {
   return function(input) {
     var strippedText = input.replace(/(<([^>]+)>)/ig, '');
-    strippedText = strippedText.replace('&nbsp;', ' ');
+    strippedText = strippedText.replace(/&nbsp;/ig, ' ');
+    strippedText = strippedText.replace(/&quot;/ig, '');
 
     var trimmedText = strippedText.trim();
     if (trimmedText.length === 0) {
@@ -350,6 +339,9 @@ oppia.filter('summarizeNonnegativeNumber', [function() {
 // Note that this filter does not truncate at the middle of a word.
 oppia.filter('truncateAndCapitalize', [function() {
   return function(input, maxNumberOfCharacters) {
+    if (!input) {
+      return input;
+    }
     var words = input.trim().match(/\S+/g);
 
     // Capitalize the first word and add it to the result.
@@ -372,6 +364,17 @@ oppia.filter('truncateAndCapitalize', [function() {
   };
 }]);
 
+oppia.filter('capitalize', [function() {
+  return function(input) {
+    if (!input) {
+      return input;
+    }
+
+    var trimmedInput = input.trim();
+    return trimmedInput.charAt(0).toUpperCase() + trimmedInput.slice(1);
+  };
+}]);
+
 oppia.filter('removeDuplicatesInArray', [function() {
   return function(input) {
     return input.filter(function(val, pos) {
@@ -382,12 +385,18 @@ oppia.filter('removeDuplicatesInArray', [function() {
 
 oppia.filter('stripFormatting', [function() {
   return function(html, whitelistedImgClasses) {
+    // Oppia RTE adds style attribute to bold and italics tags that
+    // must be removed.
+    var styleRegex = new RegExp(' style=\"[^\"]+\"', 'gm');
     // Strip out anything between and including <>,
-    // unless it is an img whose class includes one of the whitelisted classes.
-    var regex = new RegExp(
+    // unless it is an img whose class includes one of the whitelisted classes
+    // or is the bold or italics tags.
+    var tagRegex = new RegExp(
       '(?!<img.*class=".*(' + whitelistedImgClasses.join('|') +
-      ').*>)<[^>]+>', 'gm');
-    var strippedText = html ? String(html).replace(regex, '') : '';
+      ').*".*>)(?!<b>|<\/b>|<i>|<\/i>)<[^>]+>', 'gm');
+    var strippedText = html ? String(html).replace(styleRegex, '') : '';
+    strippedText = strippedText ? String(strippedText).replace(
+      tagRegex, '') : '';
     return strippedText;
   };
 }]);

@@ -16,149 +16,153 @@
  * @fileoverview Component for an exploration summary tile.
  */
 
-oppia.directive('explorationSummaryTile', [function() {
-  return {
-    restrict: 'E',
-    scope: {
-      getCollectionId: '&collectionId',
-      getExplorationId: '&explorationId',
-      getExplorationTitle: '&explorationTitle',
-      getLastUpdatedMsec: '&lastUpdatedMsec',
-      getNumViews: '&numViews',
-      getObjective: '&objective',
-      getCategory: '&category',
-      getRatings: '&ratings',
-      getContributorsSummary: '&contributorsSummary',
-      getThumbnailIconUrl: '&thumbnailIconUrl',
-      getThumbnailBgColor: '&thumbnailBgColor',
-      // If this is not null, the new exploration opens in a new window when the
-      // summary tile is clicked.
-      openInNewWindow: '@openInNewWindow',
-      isCommunityOwned: '&isCommunityOwned',
-      // If the screen width is below the threshold defined here, the mobile
-      // version of the summary tile is displayed. This attribute is optional:
-      // if it is not specified, it is treated as 0, which means that the
-      // desktop version of the summary tile is always displayed.
-      mobileCutoffPx: '@mobileCutoffPx'
-    },
-    templateUrl: 'summaryTile/exploration',
-    link: function(scope, element) {
-      element.find('.exploration-summary-avatars').on('mouseenter',
-        function() {
-          element.find('.mask').attr('class',
-            'exploration-summary-tile-mask mask');
-          // As animation duration time may be 400ms, .stop(true) is used to
-          // prevent the effects queue falling behind the mouse movement.
-          // .hide(1) and .show(1) used to place the animation in the effects
-          // queue.
-          element.find('.avatars-num-minus-one').stop(true).hide(1,
-            function() {
-              element.find('.all-avatars').stop(true).slideDown();
-            }
-          );
-        }
-      );
-
-      element.find('.exploration-summary-avatars').on('mouseleave',
-        function() {
-          element.find('.mask').attr('class', 'top-section-mask mask');
-          element.find('.all-avatars').stop(true).slideUp(400, function() {
-            element.find('.avatars-num-minus-one').stop(true).show(1);
-          });
-        }
-      );
-    },
-    controller: [
-      '$scope', '$http',
-      'oppiaDatetimeFormatter', 'RatingComputationService',
-      'windowDimensionsService', 'UrlInterpolationService',
-      function(
-        $scope, $http,
-        oppiaDatetimeFormatter, RatingComputationService,
-        windowDimensionsService, UrlInterpolationService) {
-        var contributorsSummary = $scope.getContributorsSummary() || {};
-        $scope.contributors = Object.keys(
-          contributorsSummary).sort(
-          function(contributorUsername1, contributorUsername2) {
-            var commitsOfContributor1 = contributorsSummary[
-                contributorUsername1].num_commits;
-            var commitsOfContributor2 = contributorsSummary[
-                contributorUsername2].num_commits;
-            return commitsOfContributor2 - commitsOfContributor1;
+oppia.directive('explorationSummaryTile', [
+  'UrlInterpolationService', function(UrlInterpolationService) {
+    return {
+      restrict: 'E',
+      scope: {
+        getCollectionId: '&collectionId',
+        getExplorationId: '&explorationId',
+        getExplorationTitle: '&explorationTitle',
+        getLastUpdatedMsec: '&lastUpdatedMsec',
+        getNumViews: '&numViews',
+        getObjective: '&objective',
+        getCategory: '&category',
+        getRatings: '&ratings',
+        getContributorsSummary: '&contributorsSummary',
+        getThumbnailIconUrl: '&thumbnailIconUrl',
+        getThumbnailBgColor: '&thumbnailBgColor',
+        // If this is not null, the new exploration opens in a new window when
+        // the summary tile is clicked.
+        openInNewWindow: '@openInNewWindow',
+        isCommunityOwned: '&isCommunityOwned',
+        // If this is not undefined, collection preview tile for mobile
+        // will be displayed.
+        isCollectionPreviewTile: '@isCollectionPreviewTile',
+        // If the screen width is below the threshold defined here, the mobile
+        // version of the summary tile is displayed. This attribute is optional:
+        // if it is not specified, it is treated as 0, which means that the
+        // desktop version of the summary tile is always displayed.
+        mobileCutoffPx: '@mobileCutoffPx',
+        isPlaylistTile: '&isPlaylistTile',
+        getParentExplorationIds: '&parentExplorationIds',
+        showLearnerDashboardIconsIfPossible: (
+          '&showLearnerDashboardIconsIfPossible')
+      },
+      templateUrl: UrlInterpolationService.getDirectiveTemplateUrl(
+        '/components/summary_tile/' +
+        'exploration_summary_tile_directive.html'),
+      link: function(scope, element) {
+        element.find('.exploration-summary-avatars').on('mouseenter',
+          function() {
+            element.find('.mask').attr('class',
+              'exploration-summary-tile-mask mask');
+            // As animation duration time may be 400ms, .stop(true) is used to
+            // prevent the effects queue falling behind the mouse movement.
+            // .hide(1) and .show(1) used to place the animation in the effects
+            // queue.
+            element.find('.avatars-num-minus-one').stop(true).hide(1,
+              function() {
+                element.find('.all-avatars').stop(true).slideDown();
+              }
+            );
           }
         );
 
-        $scope.avatarsList = [];
-        $scope.contributors.forEach(function(contributorName) {
-          var DEFAULT_PROFILE_IMAGE_PATH = (
-            UrlInterpolationService.getStaticImageUrl(
-              '/avatar/user_blue_72px.png'));
+        element.find('.exploration-summary-avatars').on('mouseleave',
+          function() {
+            element.find('.mask').attr('class', 'top-section-mask mask');
+            element.find('.all-avatars').stop(true).slideUp(400, function() {
+              element.find('.avatars-num-minus-one').stop(true).show(1);
+            });
+          }
+        );
+      },
+      controller: [
+        '$scope', '$http',
+        'DateTimeFormatService', 'RatingComputationService',
+        'WindowDimensionsService', 'UrlService',
+        function(
+          $scope, $http,
+          DateTimeFormatService, RatingComputationService,
+          WindowDimensionsService, UrlService) {
+          $scope.userIsLoggedIn = GLOBALS.userIsLoggedIn;
+          $scope.ACTIVITY_TYPE_EXPLORATION = (
+            constants.ACTIVITY_TYPE_EXPLORATION);
+          var contributorsSummary = $scope.getContributorsSummary() || {};
+          $scope.contributors = Object.keys(
+            contributorsSummary).sort(
+            function(contributorUsername1, contributorUsername2) {
+              var commitsOfContributor1 = contributorsSummary[
+                  contributorUsername1].num_commits;
+              var commitsOfContributor2 = contributorsSummary[
+                  contributorUsername2].num_commits;
+              return commitsOfContributor2 - commitsOfContributor1;
+            }
+          );
 
-          var avatarData = {
-            image: contributorsSummary[
-              contributorName].profile_picture_data_url ||
-              DEFAULT_PROFILE_IMAGE_PATH,
-            tooltipText: contributorName
+          $scope.avatarsList = [];
+
+          $scope.MAX_AVATARS_TO_DISPLAY = 5;
+
+          $scope.setHoverState = function(hoverState) {
+            $scope.explorationIsCurrentlyHoveredOver = hoverState;
           };
 
-          if (GLOBALS.SYSTEM_USERNAMES.indexOf(contributorName) === -1) {
-            avatarData.link = '/profile/' + contributorName;
-          }
-
-          $scope.avatarsList.push(avatarData);
-        });
-
-        if ($scope.isCommunityOwned()) {
-          var COMMUNITY_OWNED_IMAGE_PATH = (
-            UrlInterpolationService.getStaticImageUrl(
-              '/avatar/fa_globe_72px.png'));
-
-          var COMMUNITY_OWNED_TOOLTIP_TEXT = 'Community Owned';
-
-          var communityOwnedAvatar = {
-            image: COMMUNITY_OWNED_IMAGE_PATH,
-            tooltipText: COMMUNITY_OWNED_TOOLTIP_TEXT
+          $scope.getAverageRating = function() {
+            if (!$scope.getRatings()) {
+              return null;
+            }
+            return RatingComputationService.computeAverageRating(
+              $scope.getRatings());
           };
 
-          $scope.avatarsList.unshift(communityOwnedAvatar);
-        }
+          $scope.getLastUpdatedDatetime = function() {
+            if (!$scope.getLastUpdatedMsec()) {
+              return null;
+            }
+            return DateTimeFormatService.getLocaleAbbreviatedDatetimeString(
+              $scope.getLastUpdatedMsec());
+          };
 
-        $scope.MAX_AVATARS_TO_DISPLAY = 5;
+          $scope.getExplorationLink = function() {
+            if (!$scope.getExplorationId()) {
+              return '#';
+            } else {
+              var result = '/explore/' + $scope.getExplorationId();
+              if ($scope.getCollectionId()) {
+                result = UrlService.addField(
+                  result, 'collection_id', $scope.getCollectionId());
+              }
+              if ($scope.getParentExplorationIds()) {
+                var parentExplorationIds = $scope.getParentExplorationIds();
+                for (var i = 0; i < parentExplorationIds.length - 1; i++ ) {
+                  result = UrlService.addField(
+                    result, 'parent', parentExplorationIds[i]);
+                }
+                return result;
+              }
+            }
+            return result;
+          };
 
-        $scope.getAverageRating = function() {
-          return RatingComputationService.computeAverageRating(
-            $scope.getRatings());
-        };
-
-        $scope.getLastUpdatedDatetime = function() {
-          return oppiaDatetimeFormatter.getLocaleAbbreviatedDatetimeString(
-            $scope.getLastUpdatedMsec());
-        };
-
-        $scope.wasRecentlyUpdated = function() {
-          return oppiaDatetimeFormatter.isRecent($scope.getLastUpdatedMsec());
-        };
-
-        $scope.getExplorationLink = function() {
-          var result = '/explore/' + $scope.getExplorationId();
-          if ($scope.getCollectionId()) {
-            result += ('?collection_id=' + $scope.getCollectionId());
+          if (!$scope.mobileCutoffPx) {
+            $scope.mobileCutoffPx = 0;
           }
-          return result;
-        };
-
-        if (!$scope.mobileCutoffPx) {
-          $scope.mobileCutoffPx = 0;
-        }
-        $scope.isWindowLarge = (
-          windowDimensionsService.getWidth() >= $scope.mobileCutoffPx);
-
-        windowDimensionsService.registerOnResizeHook(function() {
           $scope.isWindowLarge = (
-            windowDimensionsService.getWidth() >= $scope.mobileCutoffPx);
-          $scope.$apply();
-        });
-      }
-    ]
-  };
-}]);
+            WindowDimensionsService.getWidth() >= $scope.mobileCutoffPx);
+
+          WindowDimensionsService.registerOnResizeHook(function() {
+            $scope.isWindowLarge = (
+              WindowDimensionsService.getWidth() >= $scope.mobileCutoffPx);
+            $scope.$apply();
+          });
+
+          $scope.getCompleteThumbnailIconUrl = function () {
+            return UrlInterpolationService.getStaticImageUrl(
+              $scope.getThumbnailIconUrl());
+          };
+        }
+      ]
+    };
+  }]);

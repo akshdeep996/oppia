@@ -23,25 +23,6 @@ var TIME_HEIGHT_CHANGE_MSEC = 500;
 var TIME_FADEIN_MSEC = 100;
 var TIME_NUM_CARDS_CHANGE_MSEC = 500;
 
-oppia.animation('.conversation-skin-responses-animate-slide', function() {
-  return {
-    removeClass: function(element, className, done) {
-      if (className !== 'ng-hide') {
-        done();
-        return;
-      }
-      element.hide().slideDown(400, done);
-    },
-    addClass: function(element, className, done) {
-      if (className !== 'ng-hide') {
-        done();
-        return;
-      }
-      element.slideUp(400, done);
-    }
-  };
-});
-
 oppia.animation('.conversation-skin-animate-tutor-card-on-narrow', function() {
   var tutorCardLeft, tutorCardWidth, tutorCardHeight, oppiaAvatarLeft;
   var tutorCardAnimatedLeft, tutorCardAnimatedWidth;
@@ -130,6 +111,47 @@ oppia.animation('.conversation-skin-animate-tutor-card-on-narrow', function() {
   };
 });
 
+oppia.animation('.conversation-skin-animate-tutor-card-content', function() {
+  var animateCardChange = function(element, className, done) {
+    if (className !== 'animate-card-change') {
+      return;
+    }
+
+    var currentHeight = element.height();
+    var expectedNextHeight = $(
+      '.conversation-skin-future-tutor-card ' +
+      '.conversation-skin-tutor-card-content'
+    ).height();
+
+    // Fix the current card height, so that it does not change during the
+    // animation, even though its contents might.
+    element.css('height', currentHeight);
+
+    jQuery(element).animate({
+      opacity: 0
+    }, TIME_FADEOUT_MSEC).animate({
+      height: expectedNextHeight
+    }, TIME_HEIGHT_CHANGE_MSEC).animate({
+      opacity: 1
+    }, TIME_FADEIN_MSEC, function() {
+      element.css('height', '');
+      done();
+    });
+
+    return function(cancel) {
+      if (cancel) {
+        element.css('opacity', '1.0');
+        element.css('height', '');
+        element.stop();
+      }
+    };
+  };
+
+  return {
+    addClass: animateCardChange
+  };
+});
+
 oppia.animation('.conversation-skin-animate-cards', function() {
   // This removes the newly-added class once the animation is finished.
   var animateCards = function(element, className, done) {
@@ -206,587 +228,652 @@ oppia.animation('.conversation-skin-animate-cards', function() {
   };
 });
 
-oppia.animation('.conversation-skin-animate-card-contents', function() {
-  var animateCardChange = function(element, className, done) {
-    if (className !== 'animate-card-change') {
-      return;
-    }
+oppia.directive('conversationSkin', [
+  'UrlService', 'UrlInterpolationService',
+  function(UrlService, UrlInterpolationService) {
+    return {
+      restrict: 'E',
+      scope: {},
+      link: function(scope) {
+        var isIframed = UrlService.isIframed();
+        scope.directiveTemplate = isIframed ?
+          UrlInterpolationService.getDirectiveTemplateUrl(
+            '/pages/exploration_player/' +
+            'conversation_skin_embed_directive.html') :
+          UrlInterpolationService.getDirectiveTemplateUrl(
+            '/pages/exploration_player/' +
+            'conversation_skin_directive.html');
+      },
+      template: '<div ng-include="directiveTemplate"></div>',
+      controller: [
+        '$scope', '$timeout', '$rootScope', '$window', '$translate', '$http',
+        'MessengerService', 'ExplorationPlayerService', 'UrlService',
+        'FocusManagerService', 'LearnerViewRatingService',
+        'WindowDimensionsService', 'PlayerTranscriptService',
+        'LearnerParamsService', 'PlayerPositionService',
+        'ExplorationRecommendationsService', 'StatsReportingService',
+        'siteAnalyticsService', 'ExplorationPlayerStateService',
+        'CONTENT_FOCUS_LABEL_PREFIX', 'AlertsService',
+        'CONTINUE_BUTTON_FOCUS_LABEL', 'EVENT_ACTIVE_CARD_CHANGED',
+        'EVENT_NEW_CARD_AVAILABLE', 'EVENT_PROGRESS_NAV_SUBMITTED',
+        'FatigueDetectionService', 'NumberAttemptsService',
+        'PlayerCorrectnessFeedbackEnabledService',
+        'RefresherExplorationConfirmationModalService',
+        'EXPLORATION_SUMMARY_DATA_URL_TEMPLATE', 'INTERACTION_SPECS',
+        'EVENT_NEW_CARD_OPENED', 'HintsAndSolutionManagerService',
+        'AudioTranslationManagerService', 'EVENT_AUTOPLAY_AUDIO',
+        'COMPONENT_NAME_FEEDBACK',
+        function(
+            $scope, $timeout, $rootScope, $window, $translate, $http,
+            MessengerService, ExplorationPlayerService, UrlService,
+            FocusManagerService, LearnerViewRatingService,
+            WindowDimensionsService, PlayerTranscriptService,
+            LearnerParamsService, PlayerPositionService,
+            ExplorationRecommendationsService, StatsReportingService,
+            siteAnalyticsService, ExplorationPlayerStateService,
+            CONTENT_FOCUS_LABEL_PREFIX, AlertsService,
+            CONTINUE_BUTTON_FOCUS_LABEL, EVENT_ACTIVE_CARD_CHANGED,
+            EVENT_NEW_CARD_AVAILABLE, EVENT_PROGRESS_NAV_SUBMITTED,
+            FatigueDetectionService, NumberAttemptsService,
+            PlayerCorrectnessFeedbackEnabledService,
+            RefresherExplorationConfirmationModalService,
+            EXPLORATION_SUMMARY_DATA_URL_TEMPLATE, INTERACTION_SPECS,
+            EVENT_NEW_CARD_OPENED, HintsAndSolutionManagerService,
+            AudioTranslationManagerService, EVENT_AUTOPLAY_AUDIO,
+            COMPONENT_NAME_FEEDBACK) {
+          $scope.CONTINUE_BUTTON_FOCUS_LABEL = CONTINUE_BUTTON_FOCUS_LABEL;
+          // The minimum width, in pixels, needed to be able to show two cards
+          // side-by-side.
+          var TIME_PADDING_MSEC = 250;
+          var TIME_SCROLL_MSEC = 600;
+          var MIN_CARD_LOADING_DELAY_MSEC = 950;
 
-    var currentHeight = element.height();
-    var expectedNextHeight = $(
-      '.conversation-skin-future-tutor-card ' +
-      '.conversation-skin-tutor-card-content'
-    ).height();
+          var hasInteractedAtLeastOnce = false;
+          $scope.answerIsBeingProcessed = false;
+          var _nextFocusLabel = null;
+          // This variable is used only when viewport is narrow.
+          // Indicates whether the tutor card is displayed.
+          var tutorCardIsDisplayedIfNarrow = true;
 
-    // Fix the current card height, so that it does not change during the
-    // animation, even though its contents might.
-    element.css('height', currentHeight);
+          $scope.explorationId = ExplorationPlayerService.getExplorationId();
+          $scope.isInPreviewMode = ExplorationPlayerService.isInPreviewMode();
+          $scope.isIframed = UrlService.isIframed();
+          $rootScope.loadingMessage = 'Loading';
+          $scope.hasFullyLoaded = false;
+          $scope.recommendedExplorationSummaries = null;
+          $scope.answerIsCorrect = false;
+          $scope.pendingCardWasSeenBefore = false;
+          $scope.isCorrectnessFeedbackEnabled = function() {
+            return PlayerCorrectnessFeedbackEnabledService.isEnabled();
+          };
 
-    jQuery(element).animate({
-      opacity: 0
-    }, TIME_FADEOUT_MSEC).animate({
-      height: expectedNextHeight
-    }, TIME_HEIGHT_CHANGE_MSEC).animate({
-      opacity: 1
-    }, TIME_FADEIN_MSEC, function() {
-      element.css('height', '');
-      done();
-    });
+          $scope.isCorrectnessFooterEnabled = function() {
+            return (
+              $scope.answerIsCorrect && $scope.isCorrectnessFeedbackEnabled());
+          };
 
-    return function(cancel) {
-      if (cancel) {
-        element.css('opacity', '1.0');
-        element.css('height', '');
-        element.stop();
-      }
-    };
-  };
+          $scope.isLearnAgainButton = function() {
+            return (
+              $scope.pendingCardWasSeenBefore && !$scope.answerIsCorrect &&
+              $scope.isCorrectnessFeedbackEnabled());
+          };
 
-  return {
-    addClass: animateCardChange
-  };
-});
+          $scope.OPPIA_AVATAR_IMAGE_URL = (
+            UrlInterpolationService.getStaticImageUrl(
+              '/avatar/oppia_avatar_100px.svg'));
+          $scope.getStaticImageUrl = (
+            UrlInterpolationService.getStaticImageUrl);
 
-oppia.directive('conversationSkin', ['urlService', function(urlService) {
-  return {
-    restrict: 'E',
-    scope: {},
-    link: function(scope) {
-      var isIframed = urlService.isIframed();
-      scope.directiveTemplateId = isIframed ?
-        'skins/ConversationEmbed' : 'skins/Conversation';
-    },
-    template: '<div ng-include="directiveTemplateId"></div>',
-    controller: [
-      '$scope', '$timeout', '$rootScope', '$window', '$translate',
-       'messengerService', 'oppiaPlayerService', 'urlService', 'focusService',
-      'LearnerViewRatingService', 'windowDimensionsService',
-      'playerTranscriptService', 'LearnerParamsService',
-      'playerPositionService', 'explorationRecommendationsService',
-      'StatsReportingService', 'UrlInterpolationService',
-      'siteAnalyticsService',
-      function(
-          $scope, $timeout, $rootScope, $window, $translate,
-          messengerService, oppiaPlayerService, urlService, focusService,
-          LearnerViewRatingService, windowDimensionsService,
-          playerTranscriptService, LearnerParamsService,
-          playerPositionService, explorationRecommendationsService,
-          StatsReportingService, UrlInterpolationService,
-          siteAnalyticsService) {
-        $scope.CONTINUE_BUTTON_FOCUS_LABEL = 'continueButton';
-        // The exploration domain object.
-        $scope.exploration = null;
+          $scope.activeCard = null;
+          var numVisibleCards = 0;
 
-        // The minimum width, in pixels, needed to be able to show two cards
-        // side-by-side.
-        var TWO_CARD_THRESHOLD_PX = 960;
-        var TIME_PADDING_MSEC = 250;
-        var TIME_SCROLL_MSEC = 600;
-        var MIN_CARD_LOADING_DELAY_MSEC = 950;
-        var CONTENT_FOCUS_LABEL_PREFIX = 'content-focus-label-';
+          $scope.upcomingStateName = null;
+          $scope.upcomingContentHtml = null;
+          $scope.upcomingInlineInteractionHtml = null;
 
-        var hasInteractedAtLeastOnce = false;
-        var _answerIsBeingProcessed = false;
-        var _nextFocusLabel = null;
-        // This variable is used only when viewport is narrow.
-        // Indicates whether the tutor card is displayed.
-        var tutorCardIsDisplayedIfNarrow = true;
+          $scope.DEFAULT_TWITTER_SHARE_MESSAGE_PLAYER =
+            GLOBALS.DEFAULT_TWITTER_SHARE_MESSAGE_PLAYER;
 
-        $scope.explorationId = oppiaPlayerService.getExplorationId();
-        $scope.isInPreviewMode = oppiaPlayerService.isInPreviewMode();
-        $scope.isIframed = urlService.isIframed();
-        $rootScope.loadingMessage = 'Loading';
-        $scope.hasFullyLoaded = false;
-        $scope.recommendedExplorationSummaries = [];
+          $scope.getContentFocusLabel = function(index) {
+            return CONTENT_FOCUS_LABEL_PREFIX + index;
+          };
 
-        $scope.OPPIA_AVATAR_IMAGE_URL = (
-          UrlInterpolationService.getStaticImageUrl(
-            '/avatar/oppia_black_72px.png'));
-
-        $scope.activeCard = null;
-        $scope.numProgressDots = 0;
-        $scope.arePreviousResponsesShown = false;
-
-        $scope.upcomingStateName = null;
-        $scope.upcomingContentHtml = null;
-        $scope.upcomingInlineInteractionHtml = null;
-
-        $scope.helpCardHtml = null;
-        $scope.helpCardHasContinueButton = false;
-
-        $scope.profilePicture = (
-          UrlInterpolationService.getStaticImageUrl(
-          '/avatar/user_blue_72px.png'));
-
-        $scope.DEFAULT_TWITTER_SHARE_MESSAGE_PLAYER =
-          GLOBALS.DEFAULT_TWITTER_SHARE_MESSAGE_PLAYER;
-
-        oppiaPlayerService.getUserProfileImage().then(function(result) {
-          $scope.profilePicture = result;
-        });
-
-        $scope.clearHelpCard = function() {
-          $scope.helpCardHtml = null;
-          $scope.helpCardHasContinueButton = false;
-        };
-
-        $scope.getContentFocusLabel = function(index) {
-          return CONTENT_FOCUS_LABEL_PREFIX + index;
-        };
-
-        // If the exploration is iframed, send data to its parent about its
-        // height so that the parent can be resized as necessary.
-        $scope.lastRequestedHeight = 0;
-        $scope.lastRequestedScroll = false;
-        $scope.adjustPageHeight = function(scroll, callback) {
-          $timeout(function() {
-            var newHeight = document.body.scrollHeight;
-            if (Math.abs($scope.lastRequestedHeight - newHeight) > 50.5 ||
-                (scroll && !$scope.lastRequestedScroll)) {
-              // Sometimes setting iframe height to the exact content height
-              // still produces scrollbar, so adding 50 extra px.
-              newHeight += 50;
-              messengerService.sendMessage(messengerService.HEIGHT_CHANGE, {
-                height: newHeight,
-                scroll: scroll
-              });
-              $scope.lastRequestedHeight = newHeight;
-              $scope.lastRequestedScroll = scroll;
-            }
-
-            if (callback) {
-              callback();
-            }
-          }, 100);
-        };
-
-        $scope.reloadExploration = function() {
-          $window.location.reload();
-        };
-
-        $scope.isOnTerminalCard = function() {
-          return $scope.activeCard &&
-            $scope.exploration.isStateTerminal($scope.activeCard.stateName);
-        };
-
-        var isSupplementalCardNonempty = function(card) {
-          return !$scope.exploration.isInteractionInline(card.stateName);
-        };
-
-        $scope.isCurrentSupplementalCardNonempty = function() {
-          return $scope.activeCard && isSupplementalCardNonempty(
-            $scope.activeCard);
-        };
-
-        // Navigates to the currently-active card, and resets the 'show previous
-        // responses' setting.
-        var _navigateToActiveCard = function() {
-          var index = playerPositionService.getActiveCardIndex();
-          $scope.activeCard = playerTranscriptService.getCard(index);
-          $scope.arePreviousResponsesShown = false;
-          $scope.clearHelpCard();
-          tutorCardIsDisplayedIfNarrow = true;
-          if (_nextFocusLabel && playerTranscriptService.isLastCard(index)) {
-            focusService.setFocusIfOnDesktop(_nextFocusLabel);
-          } else {
-            focusService.setFocusIfOnDesktop(
-              $scope.getContentFocusLabel(index));
-          }
-        };
-
-        var animateToTwoCards = function(doneCallback) {
-          $scope.isAnimatingToTwoCards = true;
-          $timeout(function() {
-            $scope.isAnimatingToTwoCards = false;
-            if (doneCallback) {
-              doneCallback();
-            }
-          }, TIME_NUM_CARDS_CHANGE_MSEC + TIME_FADEIN_MSEC + TIME_PADDING_MSEC);
-        };
-
-        var animateToOneCard = function(doneCallback) {
-          $scope.isAnimatingToOneCard = true;
-          $timeout(function() {
-            $scope.isAnimatingToOneCard = false;
-            if (doneCallback) {
-              doneCallback();
-            }
-          }, TIME_NUM_CARDS_CHANGE_MSEC);
-        };
-
-        $scope.isCurrentCardAtEndOfTranscript = function() {
-          return playerTranscriptService.isLastCard(
-            playerPositionService.getActiveCardIndex());
-        };
-        var _addNewCard = function(
-            stateName, newParams, contentHtml, interactionHtml) {
-          playerTranscriptService.addNewCard(
-            stateName, newParams, contentHtml, interactionHtml);
-
-          if (newParams) {
-            LearnerParamsService.init(newParams);
-          }
-
-          $scope.numProgressDots++;
-
-          var totalNumCards = playerTranscriptService.getNumCards();
-
-          var previousSupplementalCardIsNonempty = (
-            totalNumCards > 1 &&
-            isSupplementalCardNonempty(
-              playerTranscriptService.getCard(totalNumCards - 2)));
-          var nextSupplementalCardIsNonempty = isSupplementalCardNonempty(
-            playerTranscriptService.getLastCard());
-
-          if (totalNumCards > 1 && $scope.canWindowFitTwoCards() &&
-              !previousSupplementalCardIsNonempty &&
-              nextSupplementalCardIsNonempty) {
-            playerPositionService.setActiveCardIndex(
-                $scope.numProgressDots - 1);
-            animateToTwoCards(function() {});
-          } else if (
-              totalNumCards > 1 && $scope.canWindowFitTwoCards() &&
-              previousSupplementalCardIsNonempty &&
-              !nextSupplementalCardIsNonempty) {
-            animateToOneCard(function() {
-              playerPositionService.setActiveCardIndex(
-                $scope.numProgressDots - 1);
-            });
-          } else {
-            playerPositionService.setActiveCardIndex(
-              $scope.numProgressDots - 1);
-          }
-
-          if ($scope.exploration.isStateTerminal(stateName)) {
-            explorationRecommendationsService.getRecommendedSummaryDicts(
-              $scope.exploration.getAuthorRecommendedExpIds(stateName),
-              function(summaries) {
-                $scope.recommendedExplorationSummaries = summaries;
-              });
-          }
-        };
-
-        $scope.toggleShowPreviousResponses = function() {
-          $scope.arePreviousResponsesShown = !$scope.arePreviousResponsesShown;
-        };
-
-        $scope.initializePage = function() {
-          $scope.waitingForOppiaFeedback = false;
-          hasInteractedAtLeastOnce = false;
-          $scope.recommendedExplorationSummaries = [];
-
-          playerPositionService.init(_navigateToActiveCard);
-          oppiaPlayerService.init(function(exploration, initHtml, newParams) {
-            $scope.exploration = exploration;
-
-            $scope.isLoggedIn = oppiaPlayerService.isLoggedIn();
-            _nextFocusLabel = focusService.generateFocusLabel();
-
-            _addNewCard(
-              exploration.initStateName,
-              newParams,
-              initHtml,
-              oppiaPlayerService.getInteractionHtml(
-                exploration.initStateName, _nextFocusLabel));
-            $rootScope.loadingMessage = '';
-            $scope.hasFullyLoaded = true;
-
-            // If the exploration is embedded, use the exploration language
-            // as site language. If the exploration language is not supported
-            // as site language, English is used as default.
-            var langCodes = $window.GLOBALS.SUPPORTED_SITE_LANGUAGES.map(
-              function(language) {
-                return language.id;
-              });
-            if ($scope.isIframed) {
-              var explorationLanguageCode = (
-                oppiaPlayerService.getExplorationLanguageCode());
-              if (langCodes.indexOf(explorationLanguageCode) !== -1) {
-                $translate.use(explorationLanguageCode);
-              } else {
-                $translate.use('en');
+          // If the exploration is iframed, send data to its parent about its
+          // height so that the parent can be resized as necessary.
+          $scope.lastRequestedHeight = 0;
+          $scope.lastRequestedScroll = false;
+          $scope.adjustPageHeight = function(scroll, callback) {
+            $timeout(function() {
+              var newHeight = document.body.scrollHeight;
+              if (Math.abs($scope.lastRequestedHeight - newHeight) > 50.5 ||
+                  (scroll && !$scope.lastRequestedScroll)) {
+                // Sometimes setting iframe height to the exact content height
+                // still produces scrollbar, so adding 50 extra px.
+                newHeight += 50;
+                MessengerService.sendMessage(MessengerService.HEIGHT_CHANGE, {
+                  height: newHeight,
+                  scroll: scroll
+                });
+                $scope.lastRequestedHeight = newHeight;
+                $scope.lastRequestedScroll = scroll;
               }
-            }
-            $scope.adjustPageHeight(false, null);
-            $window.scrollTo(0, 0);
-            focusService.setFocusIfOnDesktop(_nextFocusLabel);
-          });
-        };
 
-        $scope.submitAnswer = function(answer, interactionRulesService) {
-          // For some reason, answers are getting submitted twice when the
-          // submit button is clicked. This guards against that.
-          if (_answerIsBeingProcessed ||
+              if (callback) {
+                callback();
+              }
+            }, 100);
+          };
+
+          $scope.reloadExploration = function() {
+            $window.location.reload();
+          };
+
+          $scope.isOnTerminalCard = function() {
+            return $scope.activeCard &&
+              ExplorationPlayerStateService.isStateTerminal(
+                $scope.activeCard.stateName);
+          };
+
+          var isSupplementalCardNonempty = function(card) {
+            return !ExplorationPlayerStateService.isInteractionInline(
+              card.stateName);
+          };
+
+          $scope.isCurrentSupplementalCardNonempty = function() {
+            return $scope.activeCard && isSupplementalCardNonempty(
+              $scope.activeCard);
+          };
+
+          $scope.isSupplementalNavShown = function() {
+            var interaction = ExplorationPlayerService.getInteraction(
+              $scope.activeCard.stateName);
+            return (
+              Boolean(interaction.id) &&
+              INTERACTION_SPECS[interaction.id].show_generic_submit_button &&
+              $scope.isCurrentCardAtEndOfTranscript());
+          };
+
+          // Navigates to the currently-active card, and resets the
+          // 'show previous responses' setting.
+          var _navigateToActiveCard = function() {
+            $rootScope.$broadcast(EVENT_ACTIVE_CARD_CHANGED);
+            $scope.$broadcast(EVENT_AUTOPLAY_AUDIO);
+            var index = PlayerPositionService.getActiveCardIndex();
+            $scope.activeCard = PlayerTranscriptService.getCard(index);
+            tutorCardIsDisplayedIfNarrow = true;
+            if (_nextFocusLabel && PlayerTranscriptService.isLastCard(index)) {
+              FocusManagerService.setFocusIfOnDesktop(_nextFocusLabel);
+            } else {
+              FocusManagerService.setFocusIfOnDesktop(
+                $scope.getContentFocusLabel(index));
+            }
+          };
+
+          var animateToTwoCards = function(doneCallback) {
+            $scope.isAnimatingToTwoCards = true;
+            $timeout(function() {
+              $scope.isAnimatingToTwoCards = false;
+              if (doneCallback) {
+                doneCallback();
+              }
+            }, TIME_NUM_CARDS_CHANGE_MSEC + TIME_FADEIN_MSEC +
+              TIME_PADDING_MSEC);
+          };
+
+          var animateToOneCard = function(doneCallback) {
+            $scope.isAnimatingToOneCard = true;
+            $timeout(function() {
+              $scope.isAnimatingToOneCard = false;
+              if (doneCallback) {
+                doneCallback();
+              }
+            }, TIME_NUM_CARDS_CHANGE_MSEC);
+          };
+
+          $scope.isCurrentCardAtEndOfTranscript = function() {
+            return PlayerTranscriptService.isLastCard(
+              PlayerPositionService.getActiveCardIndex());
+          };
+          var _addNewCard = function(
+              stateName, newParams, contentHtml, interactionHtml) {
+            PlayerTranscriptService.addNewCard(
+              stateName, newParams, contentHtml, interactionHtml);
+
+            if (newParams) {
+              LearnerParamsService.init(newParams);
+            }
+
+            numVisibleCards++;
+
+            var totalNumCards = PlayerTranscriptService.getNumCards();
+
+            var previousSupplementalCardIsNonempty = (
+              totalNumCards > 1 &&
+              isSupplementalCardNonempty(
+                PlayerTranscriptService.getCard(totalNumCards - 2)));
+            var nextSupplementalCardIsNonempty = isSupplementalCardNonempty(
+              PlayerTranscriptService.getLastCard());
+
+            if (totalNumCards > 1 &&
+                ExplorationPlayerService.canWindowShowTwoCards() &&
+                !previousSupplementalCardIsNonempty &&
+                nextSupplementalCardIsNonempty) {
+              PlayerPositionService.setActiveCardIndex(numVisibleCards - 1);
+              animateToTwoCards(function() {});
+            } else if (
+                totalNumCards > 1 &&
+                ExplorationPlayerService.canWindowShowTwoCards() &&
+                previousSupplementalCardIsNonempty &&
+                !nextSupplementalCardIsNonempty) {
+              animateToOneCard(function() {
+                PlayerPositionService.setActiveCardIndex(numVisibleCards - 1);
+              });
+            } else {
+              PlayerPositionService.setActiveCardIndex(numVisibleCards - 1);
+            }
+
+            if (ExplorationPlayerStateService.isStateTerminal(stateName)) {
+              $scope.parentExplorationIds =
+                UrlService.getQueryFieldValuesAsList('parent');
+              var recommendedExplorationIds = [];
+              if ($scope.parentExplorationIds.length > 0) {
+                var parentExplorationId = $scope.parentExplorationIds[
+                  $scope.parentExplorationIds.length - 1];
+                recommendedExplorationIds.push(parentExplorationId);
+              } else {
+                recommendedExplorationIds =
+                  ExplorationPlayerStateService.getAuthorRecommendedExpIds(
+                    stateName);
+              }
+              ExplorationRecommendationsService.getRecommendedSummaryDicts(
+                recommendedExplorationIds,
+                function(summaries) {
+                  $scope.recommendedExplorationSummaries = summaries;
+                });
+            }
+          };
+
+          $scope.initializePage = function() {
+            hasInteractedAtLeastOnce = false;
+            $scope.recommendedExplorationSummaries = null;
+
+            PlayerPositionService.init(_navigateToActiveCard);
+            ExplorationPlayerService.init(function(
+              exploration, initHtml, newParams) {
+              ExplorationPlayerStateService.setExploration(exploration);
+              $scope.isLoggedIn = ExplorationPlayerService.isLoggedIn();
+              _nextFocusLabel = FocusManagerService.generateFocusLabel();
+
+              _addNewCard(
+                exploration.initStateName,
+                newParams,
+                initHtml,
+                ExplorationPlayerService.getInteractionHtml(
+                  exploration.initStateName, _nextFocusLabel));
+              $rootScope.loadingMessage = '';
+              $scope.hasFullyLoaded = true;
+
+              // If the exploration is embedded, use the exploration language
+              // as site language. If the exploration language is not supported
+              // as site language, English is used as default.
+              var langCodes = constants.SUPPORTED_SITE_LANGUAGES.map(
+                function(language) {
+                  return language.id;
+                });
+              if ($scope.isIframed) {
+                var explorationLanguageCode = (
+                  ExplorationPlayerService.getExplorationLanguageCode());
+                if (langCodes.indexOf(explorationLanguageCode) !== -1) {
+                  $translate.use(explorationLanguageCode);
+                } else {
+                  $translate.use('en');
+                }
+              }
+              $scope.adjustPageHeight(false, null);
+              $window.scrollTo(0, 0);
+              FocusManagerService.setFocusIfOnDesktop(_nextFocusLabel);
+
+              // The timeout is needed in order to give the recipient of the
+              // broadcast sufficient time to load.
+              $timeout(function() {
+                $rootScope.$broadcast(EVENT_NEW_CARD_OPENED, {
+                  stateName: exploration.initStateName
+                });
+              });
+            });
+          };
+
+          $scope.submitAnswer = function(answer, interactionRulesService) {
+            // Safety check to prevent double submissions from occurring.
+            if ($scope.answerIsBeingProcessed ||
               !$scope.isCurrentCardAtEndOfTranscript() ||
               $scope.activeCard.destStateName) {
-            return;
-          }
-
-          $scope.clearHelpCard();
-
-          _answerIsBeingProcessed = true;
-          hasInteractedAtLeastOnce = true;
-          $scope.waitingForOppiaFeedback = true;
-
-          var _oldStateName = playerTranscriptService.getLastCard().stateName;
-          playerTranscriptService.addNewAnswer(answer);
-
-          var timeAtServerCall = new Date().getTime();
-
-          oppiaPlayerService.submitAnswer(
-            answer, interactionRulesService, function(
-                newStateName, refreshInteraction, feedbackHtml, contentHtml,
-                newParams) {
-              // Do not wait if the interaction is supplemental -- there's
-              // already a delay bringing in the help card.
-              var millisecsLeftToWait = (
-                !$scope.exploration.isInteractionInline(_oldStateName) ? 1.0 :
-                Math.max(MIN_CARD_LOADING_DELAY_MSEC - (
-                  new Date().getTime() - timeAtServerCall),
-                1.0));
-
-              $timeout(function() {
-                $scope.waitingForOppiaFeedback = false;
-                var pairs = (
-                  playerTranscriptService.getLastCard().answerFeedbackPairs);
-                var lastAnswerFeedbackPair = pairs[pairs.length - 1];
-
-                if (_oldStateName === newStateName) {
-                  // Stay on the same card.
-                  playerTranscriptService.addNewFeedback(feedbackHtml);
-                  if (feedbackHtml &&
-                      !$scope.exploration.isInteractionInline(
-                        $scope.activeCard.stateName)) {
-                    $scope.helpCardHtml = feedbackHtml;
-                  }
-                  if (refreshInteraction) {
-                    // Replace the previous interaction with another of the
-                    // same type.
-                    _nextFocusLabel = focusService.generateFocusLabel();
-                    playerTranscriptService.updateLatestInteractionHtml(
-                      oppiaPlayerService.getInteractionHtml(
-                        newStateName, _nextFocusLabel) +
-                      oppiaPlayerService.getRandomSuffix());
-                  }
-                  focusService.setFocusIfOnDesktop(_nextFocusLabel);
-                  scrollToBottom();
-                } else {
-                  // There is a new card. If there is no feedback, move on
-                  // immediately. Otherwise, give the learner a chance to read
-                  // the feedback, and display a 'Continue' button.
-
-                  _nextFocusLabel = focusService.generateFocusLabel();
-
-                  playerTranscriptService.setDestination(newStateName);
-
-                  // These are used to compute the dimensions for the next card.
-                  $scope.upcomingStateName = newStateName;
-                  $scope.upcomingParams = newParams;
-                  $scope.upcomingContentHtml = (
-                    contentHtml + oppiaPlayerService.getRandomSuffix());
-                  var _isNextInteractionInline = (
-                    $scope.exploration.isInteractionInline(newStateName));
-                  $scope.upcomingInlineInteractionHtml = (
-                    _isNextInteractionInline ?
-                    oppiaPlayerService.getInteractionHtml(
-                      newStateName, _nextFocusLabel
-                    ) + oppiaPlayerService.getRandomSuffix() : '');
-
-                  if (feedbackHtml) {
-                    playerTranscriptService.addNewFeedback(feedbackHtml);
-
-                    if (!$scope.exploration.isInteractionInline(
-                          $scope.activeCard.stateName)) {
-                      $scope.helpCardHtml = feedbackHtml;
-                      $scope.helpCardHasContinueButton = true;
-                    }
-
-                    _nextFocusLabel = $scope.CONTINUE_BUTTON_FOCUS_LABEL;
-                    focusService.setFocusIfOnDesktop(_nextFocusLabel);
-                    scrollToBottom();
-                  } else {
-                    playerTranscriptService.addNewFeedback(feedbackHtml);
-                    $scope.showPendingCard(
-                      newStateName,
-                      newParams,
-                      contentHtml + oppiaPlayerService.getRandomSuffix());
-                  }
-                }
-
-                _answerIsBeingProcessed = false;
-              }, millisecsLeftToWait);
-            }
-          );
-        };
-        $scope.startCardChangeAnimation = false;
-        $scope.showPendingCard = function(
-            newStateName, newParams, newContentHtml) {
-          $scope.startCardChangeAnimation = true;
-
-          $timeout(function() {
-            var newInteractionHtml = oppiaPlayerService.getInteractionHtml(
-              newStateName, _nextFocusLabel);
-            // Note that newInteractionHtml may be null.
-            if (newInteractionHtml) {
-              newInteractionHtml += oppiaPlayerService.getRandomSuffix();
-            }
-
-            _addNewCard(
-              newStateName, newParams, newContentHtml, newInteractionHtml);
-
-            $scope.upcomingStateName = null;
-            $scope.upcomingParams = null;
-            $scope.upcomingContentHtml = null;
-            $scope.upcomingInlineInteractionHtml = null;
-          }, TIME_FADEOUT_MSEC + 0.1 * TIME_HEIGHT_CHANGE_MSEC);
-
-          $timeout(function() {
-            focusService.setFocusIfOnDesktop(_nextFocusLabel);
-            scrollToTop();
-          },
-          TIME_FADEOUT_MSEC + TIME_HEIGHT_CHANGE_MSEC + 0.5 * TIME_FADEIN_MSEC);
-
-          $timeout(function() {
-            $scope.startCardChangeAnimation = false;
-          },
-          TIME_FADEOUT_MSEC + TIME_HEIGHT_CHANGE_MSEC + TIME_FADEIN_MSEC +
-          TIME_PADDING_MSEC);
-        };
-
-        var scrollToBottom = function() {
-          $timeout(function() {
-            var tutorCard = $('.conversation-skin-main-tutor-card');
-
-            if (tutorCard.length === 0) {
               return;
             }
-            var tutorCardBottom = (
-              tutorCard.offset().top + tutorCard.outerHeight());
-            if ($(window).scrollTop() + $(window).height() < tutorCardBottom) {
-              $('html, body').animate({
-                scrollTop: tutorCardBottom - $(window).height() + 12
-              }, {
-                duration: TIME_SCROLL_MSEC,
-                easing: 'easeOutQuad'
-              });
+
+            if (!$scope.isInPreviewMode) {
+              FatigueDetectionService.recordSubmissionTimestamp();
+              if (FatigueDetectionService.isSubmittingTooFast()) {
+                FatigueDetectionService.displayTakeBreakMessage();
+                $scope.$broadcast('oppiaFeedbackAvailable');
+                return;
+              }
             }
-          }, 100);
-        };
+            NumberAttemptsService.submitAttempt();
 
-        var scrollToTop = function() {
-          $timeout(function() {
-            $('html, body').animate({
-              scrollTop: 0
-            }, 800, 'easeOutQuart');
-            return false;
+            $scope.answerIsBeingProcessed = true;
+            hasInteractedAtLeastOnce = true;
+
+            var _oldStateName = PlayerTranscriptService.getLastCard().stateName;
+            PlayerTranscriptService.addNewInput(answer, false);
+
+            var timeAtServerCall = new Date().getTime();
+
+            $scope.answerIsCorrect = ExplorationPlayerService.submitAnswer(
+              answer, interactionRulesService, function(
+                  newStateName, refreshInteraction, feedbackHtml,
+                  feedbackAudioTranslations, contentHtml, newParams,
+                  refresherExplorationId) {
+                // Do not wait if the interaction is supplemental -- there's
+                // already a delay bringing in the help card.
+                var millisecsLeftToWait = (
+                  !ExplorationPlayerStateService.isInteractionInline(
+                    _oldStateName) ? 1.0 :
+                  Math.max(MIN_CARD_LOADING_DELAY_MSEC - (
+                    new Date().getTime() - timeAtServerCall),
+                  1.0));
+
+                $timeout(function() {
+                  $scope.$broadcast('oppiaFeedbackAvailable');
+                  var pairs = (
+                    PlayerTranscriptService.getLastCard().inputResponsePairs);
+                  var lastAnswerFeedbackPair = pairs[pairs.length - 1];
+                  AudioTranslationManagerService.setSecondaryAudioTranslations(
+                    feedbackAudioTranslations, feedbackHtml,
+                    COMPONENT_NAME_FEEDBACK);
+                  $scope.$broadcast(EVENT_AUTOPLAY_AUDIO);
+
+                  if (_oldStateName === newStateName) {
+                    // Stay on the same card.
+                    HintsAndSolutionManagerService.recordWrongAnswer();
+
+                    PlayerTranscriptService.addNewResponse(feedbackHtml);
+                    if (feedbackHtml &&
+                        !ExplorationPlayerStateService.isInteractionInline(
+                          $scope.activeCard.stateName)) {
+                      $scope.$broadcast('helpCardAvailable', {
+                        helpCardHtml: feedbackHtml,
+                        hasContinueButton: false
+                      });
+                    }
+                    if (refreshInteraction) {
+                      // Replace the previous interaction with another of the
+                      // same type.
+                      _nextFocusLabel =
+                        FocusManagerService.generateFocusLabel();
+                      PlayerTranscriptService.updateLatestInteractionHtml(
+                        ExplorationPlayerService.getInteractionHtml(
+                          newStateName, _nextFocusLabel) +
+                        ExplorationPlayerService.getRandomSuffix());
+                    }
+
+                    $scope.redirectToRefresherExplorationConfirmed = false;
+
+                    if (refresherExplorationId) {
+                      $http.get(EXPLORATION_SUMMARY_DATA_URL_TEMPLATE, {
+                        params: {
+                          stringified_exp_ids: JSON.stringify(
+                            [refresherExplorationId])
+                        }
+                      }).then(function(response) {
+                        if (response.data.summaries.length > 0) {
+                          RefresherExplorationConfirmationModalService.
+                            displayRedirectConfirmationModal(
+                              refresherExplorationId,
+                              function() {
+                                $scope.redirectToRefresherExplorationConfirmed =
+                                  true;
+                              }
+                            );
+                        }
+                      });
+                    }
+                    FocusManagerService.setFocusIfOnDesktop(_nextFocusLabel);
+                    scrollToBottom();
+                  } else {
+                    // There is a new card. If there is no feedback, move on
+                    // immediately. Otherwise, give the learner a chance to read
+                    // the feedback, and display a 'Continue' button.
+                    FatigueDetectionService.reset();
+                    NumberAttemptsService.reset();
+                    _nextFocusLabel = FocusManagerService.generateFocusLabel();
+
+                    PlayerTranscriptService.setDestination(newStateName);
+
+                    // These are used to compute the dimensions for the
+                    // next card.
+                    $scope.upcomingStateName = newStateName;
+                    $scope.upcomingParams = newParams;
+                    $scope.upcomingContentHtml = (
+                      contentHtml + ExplorationPlayerService.getRandomSuffix());
+
+                    var _isNextInteractionInline = (
+                      ExplorationPlayerStateService.isInteractionInline(
+                        newStateName));
+                    $scope.upcomingInlineInteractionHtml = (
+                      _isNextInteractionInline ?
+                      ExplorationPlayerService.getInteractionHtml(
+                        newStateName, _nextFocusLabel
+                      ) + ExplorationPlayerService.getRandomSuffix() : '');
+                    $scope.upcomingInteractionInstructions = (
+                      ExplorationPlayerStateService.getInteractionInstructions(
+                        $scope.upcomingStateName));
+
+                    if (feedbackHtml) {
+                      var stateHistory =
+                        PlayerTranscriptService.getStateHistory();
+                      if (stateHistory.indexOf(newStateName) !== -1) {
+                        $scope.pendingCardWasSeenBefore = true;
+                      }
+                      PlayerTranscriptService.addNewResponse(feedbackHtml);
+                      if (!ExplorationPlayerStateService.isInteractionInline(
+                            $scope.activeCard.stateName)) {
+                        $scope.$broadcast('helpCardAvailable', {
+                          helpCardHtml: feedbackHtml,
+                          hasContinueButton: true
+                        });
+                      }
+                      $scope.$broadcast(EVENT_NEW_CARD_AVAILABLE);
+                      _nextFocusLabel = $scope.CONTINUE_BUTTON_FOCUS_LABEL;
+                      FocusManagerService.setFocusIfOnDesktop(_nextFocusLabel);
+                      scrollToBottom();
+                    } else {
+                      PlayerTranscriptService.addNewResponse(feedbackHtml);
+                      $scope.showPendingCard(
+                        newStateName,
+                        newParams,
+                        contentHtml +
+                        ExplorationPlayerService.getRandomSuffix());
+                    }
+                  }
+                  $scope.answerIsBeingProcessed = false;
+                }, millisecsLeftToWait);
+              }
+            );
+          };
+          $scope.startCardChangeAnimation = false;
+          $scope.showPendingCard = function(
+              newStateName, newParams, newContentHtml) {
+            $scope.startCardChangeAnimation = true;
+
+            $timeout(function() {
+              var newInteractionHtml =
+                ExplorationPlayerService.getInteractionHtml(
+                newStateName, _nextFocusLabel);
+              // Note that newInteractionHtml may be null.
+              if (newInteractionHtml) {
+                newInteractionHtml +=
+                  ExplorationPlayerService.getRandomSuffix();
+              }
+
+              _addNewCard(
+                newStateName, newParams, newContentHtml, newInteractionHtml);
+
+              $scope.upcomingStateName = null;
+              $scope.upcomingParams = null;
+              $scope.upcomingContentHtml = null;
+              $scope.upcomingInlineInteractionHtml = null;
+              $scope.upcomingInteractionInstructions = null;
+            }, TIME_FADEOUT_MSEC + 0.1 * TIME_HEIGHT_CHANGE_MSEC);
+
+            $timeout(function() {
+              FocusManagerService.setFocusIfOnDesktop(_nextFocusLabel);
+              scrollToTop();
+            },
+            TIME_FADEOUT_MSEC + TIME_HEIGHT_CHANGE_MSEC +
+              0.5 * TIME_FADEIN_MSEC);
+
+            $timeout(function() {
+              $scope.startCardChangeAnimation = false;
+            },
+            TIME_FADEOUT_MSEC + TIME_HEIGHT_CHANGE_MSEC + TIME_FADEIN_MSEC +
+            TIME_PADDING_MSEC);
+
+            $rootScope.$broadcast(EVENT_NEW_CARD_OPENED, {
+              stateName: newStateName
+            });
+          };
+
+          $scope.showUpcomingCard = function() {
+            $scope.answerIsCorrect = false;
+            $scope.showPendingCard(
+              $scope.upcomingStateName, $scope.upcomingParams,
+              $scope.upcomingContentHtml);
+          };
+
+          var scrollToBottom = function() {
+            $timeout(function() {
+              var tutorCard = $('.conversation-skin-main-tutor-card');
+
+              if (tutorCard.length === 0) {
+                return;
+              }
+              var tutorCardBottom = (
+                tutorCard.offset().top + tutorCard.outerHeight());
+              if ($(window).scrollTop() +
+                    $(window).height() < tutorCardBottom) {
+                $('html, body').animate({
+                  scrollTop: tutorCardBottom - $(window).height() + 12
+                }, {
+                  duration: TIME_SCROLL_MSEC,
+                  easing: 'easeOutQuad'
+                });
+              }
+            }, 100);
+          };
+
+          var scrollToTop = function() {
+            $timeout(function() {
+              $('html, body').animate({
+                scrollTop: 0
+              }, 800, 'easeOutQuart');
+              return false;
+            });
+          };
+
+          $scope.submitUserRating = function(ratingValue) {
+            LearnerViewRatingService.submitUserRating(ratingValue);
+          };
+          $scope.$on('ratingUpdated', function() {
+            $scope.userRating = LearnerViewRatingService.getUserRating();
           });
-        };
 
-        $scope.submitUserRating = function(ratingValue) {
-          LearnerViewRatingService.submitUserRating(ratingValue);
-        };
-        $scope.$on('ratingUpdated', function() {
-          $scope.userRating = LearnerViewRatingService.getUserRating();
-        });
-
-        $window.addEventListener('beforeunload', function(e) {
-          if (hasInteractedAtLeastOnce && !$scope.isInPreviewMode &&
-              !$scope.exploration.isStateTerminal(
-                playerTranscriptService.getLastCard().stateName)) {
-            StatsReportingService.recordMaybeLeaveEvent(
-              playerTranscriptService.getLastStateName(),
-              LearnerParamsService.getAllParams());
-            var confirmationMessage = (
-              'If you navigate away from this page, your progress on the ' +
-              'exploration will be lost.');
-            (e || $window.event).returnValue = confirmationMessage;
-            return confirmationMessage;
-          }
-        });
-
-        $scope.windowWidth = windowDimensionsService.getWidth();
-        $window.onresize = function() {
-          $scope.adjustPageHeight(false, null);
-          $scope.windowWidth = windowDimensionsService.getWidth();
-        };
-
-        $window.addEventListener('scroll', function() {
-          fadeDotsOnScroll();
-          fixSupplementOnScroll();
-        });
-
-        var fadeDotsOnScroll = function() {
-          var progressDots = $('.conversation-skin-progress-dots');
-          var progressDotsTop = progressDots.height();
-          var newOpacity = Math.max(
-            (progressDotsTop - $(window).scrollTop()) / progressDotsTop, 0);
-          progressDots.css({
-            opacity: newOpacity
+          $window.addEventListener('beforeunload', function(e) {
+            if ($scope.redirectToRefresherExplorationConfirmed) {
+              return;
+            }
+            if (hasInteractedAtLeastOnce && !$scope.isInPreviewMode &&
+                !ExplorationPlayerStateService.isStateTerminal(
+                  PlayerTranscriptService.getLastCard().stateName)) {
+              StatsReportingService.recordMaybeLeaveEvent(
+                PlayerTranscriptService.getLastStateName(),
+                LearnerParamsService.getAllParams());
+              var confirmationMessage = (
+                'If you navigate away from this page, your progress on the ' +
+                'exploration will be lost.');
+              (e || $window.event).returnValue = confirmationMessage;
+              return confirmationMessage;
+            }
           });
-        };
 
-        var fixSupplementOnScroll = function() {
-          var supplementCard = $('div.conversation-skin-supplemental-card');
-          var topMargin = $('.navbar-container').height() - 20;
-          if ($(window).scrollTop() > topMargin) {
-            supplementCard.addClass(
-              'conversation-skin-supplemental-card-fixed');
-          } else {
-            supplementCard.removeClass(
-              'conversation-skin-supplemental-card-fixed');
+          $scope.canWindowShowTwoCards = function() {
+            return ExplorationPlayerService.canWindowShowTwoCards();
+          };
+
+          $window.onresize = function() {
+            $scope.adjustPageHeight(false, null);
+          };
+
+          $window.addEventListener('scroll', function() {
+            fixSupplementOnScroll();
+          });
+
+          var fixSupplementOnScroll = function() {
+            var supplementCard = $('div.conversation-skin-supplemental-card');
+            var topMargin = $('.navbar-container').height() - 20;
+            if ($(window).scrollTop() > topMargin) {
+              supplementCard.addClass(
+                'conversation-skin-supplemental-card-fixed');
+            } else {
+              supplementCard.removeClass(
+                'conversation-skin-supplemental-card-fixed');
+            }
+          };
+
+          $scope.initializePage();
+          LearnerViewRatingService.init(function(userRating) {
+            $scope.userRating = userRating;
+          });
+
+          $scope.collectionId = GLOBALS.collectionId;
+          $scope.collectionTitle = GLOBALS.collectionTitle;
+          $scope.collectionSummary = null;
+
+          if ($scope.collectionId) {
+            $http.get('/collectionsummarieshandler/data', {
+              params: {
+                stringified_collection_ids: JSON.stringify(
+                                              [$scope.collectionId])
+              }
+            }).then(
+              function(response) {
+                $scope.collectionSummary = response.data.summaries[0];
+              },
+              function() {
+                AlertsService.addWarning(
+                  'There was an error while fetching the collection summary.');
+              }
+            );
           }
-        };
 
-        $scope.canWindowFitTwoCards = function() {
-          return $scope.windowWidth >= TWO_CARD_THRESHOLD_PX;
-        };
+          $scope.onNavigateFromIframe = function() {
+            siteAnalyticsService.registerVisitOppiaFromIframeEvent(
+              $scope.explorationId);
+          };
 
-        $scope.isViewportNarrow = function() {
-          return $scope.windowWidth < TWO_CARD_THRESHOLD_PX;
-        };
+          // Interaction answer validity is used to enable/disable
+          // the progress-nav's Submit button. This logic is here because
+          // Interactions and the progress-nav are both descendants
+          // of ConversationSkinDirective.
+          $scope.interactionAnswerIsValid = true;
+          $scope.setInteractionAnswerValidity = function(answerValidity) {
+            $scope.interactionAnswerIsValid = answerValidity;
+          };
 
-        $scope.isWindowTall = function() {
-          return document.body.scrollHeight > $window.innerHeight;
-        };
-
-        $scope.isScreenNarrowAndShowingTutorCard = function() {
-          if (!$scope.isCurrentSupplementalCardNonempty()) {
-            return $scope.isViewportNarrow();
-          }
-          return $scope.isViewportNarrow() &&
-                 tutorCardIsDisplayedIfNarrow;
-        };
-
-        $scope.isScreenNarrowAndShowingSupplementalCard = function() {
-          return $scope.isViewportNarrow() &&
-                 !tutorCardIsDisplayedIfNarrow;
-        };
-
-        $scope.showTutorCardIfScreenIsNarrow = function() {
-          if ($scope.isViewportNarrow()) {
-            tutorCardIsDisplayedIfNarrow = true;
-          }
-        };
-
-        $scope.showSupplementalCardIfScreenIsNarrow = function() {
-          if ($scope.isViewportNarrow()) {
-            tutorCardIsDisplayedIfNarrow = false;
-          }
-        };
-
-        $scope.initializePage();
-        LearnerViewRatingService.init(function(userRating) {
-          $scope.userRating = userRating;
-        });
-
-        $scope.collectionId = GLOBALS.collectionId;
-        $scope.collectionTitle = GLOBALS.collectionTitle;
-
-        $scope.onNavigateFromIframe = function() {
-          siteAnalyticsService.registerVisitOppiaFromIframeEvent(
-            $scope.explorationId);
-        };
-      }
-    ]
-  };
-}]);
+          $scope.submitAnswerFromProgressNav = function() {
+            $scope.$broadcast(EVENT_PROGRESS_NAV_SUBMITTED);
+          };
+        }
+      ]
+    };
+  }]);

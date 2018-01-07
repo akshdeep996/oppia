@@ -29,44 +29,14 @@ describe('HTML to text', function() {
     ['abc  a', 'abc  a', 'abc  a']
   ];
 
-  it('should convert HTML to and from raw text correctly',
-      inject(function($filter) {
-    htmlUnicodeHtmlPairings.forEach(function(pairing) {
-      expect($filter('convertHtmlToUnicode')(pairing[0])).toEqual(pairing[1]);
-      expect($filter('convertUnicodeToHtml')(pairing[1])).toEqual(pairing[2]);
-    });
-  }));
-
-  var htmlUnicodeHtmlPairingsWithParams = [[
-    'abc <oppia-parameter>name</oppia-parameter>  a',
-    'abc {{name}}  a',
-    'abc <oppia-parameter>name</oppia-parameter>  a'
-  ], [
-    '{{{<oppia-parameter>name</oppia-parameter>',
-    '\\\{\\\{\\\{{{name}}',
-    '{{{<oppia-parameter>name</oppia-parameter>'
-  ], [
-    '\\{\\{', '\\\\\\{\\\\\\{', '\\{\\{'
-  ], [
-    '\\}}\\{\\{', '\\\\\\}\\}\\\\\\{\\\\\\{', '\\}}\\{\\{'
-  ]];
-
-  it('should convert HTML-with-params to and from raw text correctly',
-      inject(function($filter) {
-    htmlUnicodeHtmlPairings.forEach(function(pairing) {
-      expect($filter('convertHtmlWithParamsToUnicode')(pairing[0])).toEqual(
-        pairing[1]);
-      expect($filter('convertUnicodeWithParamsToHtml')(pairing[1])).toEqual(
-        pairing[2]);
-    });
-
-    htmlUnicodeHtmlPairingsWithParams.forEach(function(pairing) {
-      expect($filter('convertHtmlWithParamsToUnicode')(pairing[0])).toEqual(
-        pairing[1]);
-      expect($filter('convertUnicodeWithParamsToHtml')(pairing[1])).toEqual(
-        pairing[2]);
-    });
-  }));
+  it('should convert HTML to and from raw text correctly', inject(
+    function($filter) {
+      htmlUnicodeHtmlPairings.forEach(function(pairing) {
+        expect($filter('convertHtmlToUnicode')(pairing[0])).toEqual(pairing[1]);
+        expect($filter('convertUnicodeToHtml')(pairing[1])).toEqual(pairing[2]);
+      });
+    }
+  ));
 
   var invalidUnicodeStrings = [
     '{}',
@@ -91,7 +61,8 @@ describe('Normalizer tests', function() {
     'isFloat',
     'isAtLeast',
     'isAtMost',
-    'isNonempty'
+    'isNonempty',
+    'isInteger'
   ];
 
   beforeEach(module('oppia'));
@@ -165,10 +136,19 @@ describe('Normalizer tests', function() {
     expect(filter('a')).toBe(true);
     expect(filter('')).toBe(false);
   }));
+
+  it('should validate integers', inject(function($filter) {
+    var filter = $filter('isInteger');
+    expect(filter('3')).toBe(true);
+    expect(filter('-3')).toBe(true);
+    expect(filter('3.0')).toBe(true);
+    expect(filter('3.5')).toBe(false);
+  }));
 });
 
 describe('RTE helper service', function() {
-  var _DATA_URI = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///';
+  var _IMAGE_URL = '/rich_text_components/Some/Some.png';
+  var _INTERPOLATED_IMAGE_URL = '/extensions' + _IMAGE_URL;
   var rhs;
 
   beforeEach(module('oppia'));
@@ -176,11 +156,11 @@ describe('RTE helper service', function() {
   beforeEach(function() {
     module(function($provide) {
       $provide.constant('RTE_COMPONENT_SPECS', [{
-        frontend_name: 'image',
-        backend_name: 'Image',
+        frontend_id: 'image',
+        backend_id: 'Image',
         tooltip: 'Insert image',
-        icon_data_url: _DATA_URI,
-        preview_url_template: _DATA_URI
+        icon_data_url: _IMAGE_URL,
+        preview_url_template: _IMAGE_URL
       }]);
     });
   });
@@ -201,12 +181,13 @@ describe('RTE helper service', function() {
       '<div>abc<span>def</span></div><b>ghi</b>'
     ], [
       '<oppia-noninteractive-image></oppia-noninteractive-image>',
-      '<img src="' + _DATA_URI + '" class="oppia-noninteractive-image">'
+      '<img src="' + _INTERPOLATED_IMAGE_URL + '" ' +
+           'class="oppia-noninteractive-image">'
     ], [
       '<oppia-noninteractive-image ' +
         'image_id-with-value="&amp;quot;T&amp;quot;">' +
       '</oppia-noninteractive-image>',
-      '<img src="' + _DATA_URI + '" ' +
+      '<img src="' + _INTERPOLATED_IMAGE_URL + '" ' +
            'class="oppia-noninteractive-image" ' +
            'image_id-with-value="&amp;quot;T&amp;quot;">'
     ]];
@@ -302,156 +283,158 @@ describe('RTE helper service', function() {
     expect($filter('sanitizeHtmlForRte')('</evil>abc')).toEqual('abc');
   }));
 
-  it('should preserve RTE extensions while sanitizing HTML',
-      inject(function($filter) {
-    var STYLE_SUFFIX = (
-      'style="box-sizing: border-box; border: 0px; vertical-align: middle; ' +
-      'max-width: 100%; color: rgb(85, 85, 85); ' +
-      'font-family: Roboto, Arial, sans-serif; font-size: 16px; ' +
-      'font-style: normal; font-variant: normal; font-weight: normal; ' +
-      'letter-spacing: normal; line-height: 29.5360012054443px; ' +
-      'orphans: auto; text-align: left; text-indent: 0px; ' +
-      'text-transform: none; white-space: normal; widows: 1; ' +
-      'word-spacing: 0px; -webkit-text-stroke-width: 0px; ' +
-      'background-color: rgb(255, 255, 255);">');
+  it('should preserve RTE extensions while sanitizing HTML', inject(
+    function($filter) {
+      var STYLE_SUFFIX = (
+        'style="box-sizing: border-box; border: 0px; vertical-align: middle; ' +
+        'max-width: 100%; color: rgb(85, 85, 85); ' +
+        'font-family: Roboto, Arial, sans-serif; font-size: 16px; ' +
+        'font-style: normal; font-variant: normal; font-weight: normal; ' +
+        'letter-spacing: normal; line-height: 29.5360012054443px; ' +
+        'orphans: auto; text-align: left; text-indent: 0px; ' +
+        'text-transform: none; white-space: normal; widows: 1; ' +
+        'word-spacing: 0px; -webkit-text-stroke-width: 0px; ' +
+        'background-color: rgb(255, 255, 255);">');
 
-    var RAW_MATH = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-math" ' +
-      'raw_latex-with-value="&amp;quot;\\frac{x}{y}&amp;quot;" ' +
-      STYLE_SUFFIX);
-    var RAW_LINK = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-link" ' +
-      'url-with-value="&amp;quot;https://www.example.com/abc&amp;quot;" ' +
-      'text-with-value="&amp;quot;&amp;quot;" ' +
-      'open_link_in_same_window-with-value="false" ' +
-      STYLE_SUFFIX);
-    var RAW_VIDEO = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-video" ' +
-      'video_id-with-value="&amp;quot;Ntcw0H0hwPU&amp;quot;" ' +
-      'start-with-value="10" ' +
-      'end-with-value="20" ' +
-      'autoplay-with-value="true" ' +
-      STYLE_SUFFIX);
-    var RAW_COLLAPSIBLE = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-collapsible" ' +
-      'heading-with-value="&amp;quot;Test Collapsible&amp;quot;" ' +
-      'content-with-value="&amp;quot;&amp;lt;p&amp;gt;Collapsible content' +
-        '&amp;amp;nbsp;&amp;lt;oppia-noninteractive-math ' +
+      var RAW_MATH = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-math" ' +
+        'raw_latex-with-value="&amp;quot;\\frac{x}{y}&amp;quot;" ' +
+        STYLE_SUFFIX);
+      var RAW_LINK = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-link" ' +
+        'url-with-value="&amp;quot;https://www.example.com/abc&amp;quot;" ' +
+        'text-with-value="&amp;quot;&amp;quot;" ' +
+        'open_link_in_same_window-with-value="false" ' +
+        STYLE_SUFFIX);
+      var RAW_VIDEO = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-video" ' +
+        'video_id-with-value="&amp;quot;Ntcw0H0hwPU&amp;quot;" ' +
+        'start-with-value="10" ' +
+        'end-with-value="20" ' +
+        'autoplay-with-value="true" ' +
+        STYLE_SUFFIX);
+      var RAW_COLLAPSIBLE = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-collapsible" ' +
+        'heading-with-value="&amp;quot;Test Collapsible&amp;quot;" ' +
+        'content-with-value="&amp;quot;&amp;lt;p&amp;gt;Collapsible content' +
+          '&amp;amp;nbsp;&amp;lt;oppia-noninteractive-math ' +
+          'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
+          '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
+          '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
+          '&amp;lt;/p&amp;gt;&amp;quot;" ' + STYLE_SUFFIX);
+      var RAW_TABS = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-tabs" ' +
+        'tab_contents-with-value="[{&amp;quot;title&amp;quot;:&amp;quot;Tab 1' +
+        '&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p&amp;gt;' +
+        'First Tabs Content&amp;amp;nbsp;&amp;lt;oppia-noninteractive-link ' +
+        'url-with-value=\&amp;quot;&amp;amp;amp;quot;' +
+        'https://www.example.com/abc&amp;amp;amp;quot;\&amp;quot; ' +
+        'text-with-value=\&amp;quot;&amp;amp;amp;quot;&amp;amp;amp;quot;' +
+        '\&amp;quot; open_link_in_same_window-with-value=\&amp;quot;' +
+        'false\&amp;quot;&amp;gt;&amp;lt;/oppia-noninteractive-link&amp;gt;' +
+        '&amp;lt;/p&amp;gt;&amp;quot;},{&amp;quot;title&amp;quot;:&amp;quot;' +
+        'Tab 2&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p' +
+        '&amp;gt;Second Tabs Content&amp;amp;nbsp;&amp;' +
+        'lt;oppia-noninteractive-math ' +
         'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
         '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
         '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
-        '&amp;lt;/p&amp;gt;&amp;quot;" ' + STYLE_SUFFIX);
-    var RAW_TABS = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-tabs" ' +
-      'tab_contents-with-value="[{&amp;quot;title&amp;quot;:&amp;quot;Tab 1' +
-      '&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p&amp;gt;' +
-      'First Tabs Content&amp;amp;nbsp;&amp;lt;oppia-noninteractive-link ' +
-      'url-with-value=\&amp;quot;&amp;amp;amp;quot;' +
-      'https://www.example.com/abc&amp;amp;amp;quot;\&amp;quot; ' +
-      'text-with-value=\&amp;quot;&amp;amp;amp;quot;&amp;amp;amp;quot;\&amp;' +
-      'quot; open_link_in_same_window-with-value=\&amp;quot;' +
-      'false\&amp;quot;&amp;gt;&amp;lt;/oppia-noninteractive-link&amp;gt;' +
-      '&amp;lt;/p&amp;gt;&amp;quot;},{&amp;quot;title&amp;quot;:&amp;quot;' +
-      'Tab 2&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p' +
-      '&amp;gt;Second Tabs Content&amp;amp;nbsp;&amp;' +
-      'lt;oppia-noninteractive-math ' +
-      'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
-      '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
-      '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
-      '&amp;lt;/p&amp;gt;&amp;quot;}]" ' + STYLE_SUFFIX);
+        '&amp;lt;/p&amp;gt;&amp;quot;}]" ' + STYLE_SUFFIX);
 
-    var PROCESSED_MATH = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-math" ' +
-      'raw_latex-with-value="&amp;quot;\\frac{x}{y}&amp;quot;">');
-    var PROCESSED_LINK = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-link" ' +
-      'url-with-value="&amp;quot;https://www.example.com/abc&amp;quot;" ' +
-      'text-with-value="&amp;quot;&amp;quot;" ' +
-      'open_link_in_same_window-with-value="false">');
-    var PROCESSED_VIDEO = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-video" ' +
-      'video_id-with-value="&amp;quot;Ntcw0H0hwPU&amp;quot;" ' +
-      'start-with-value="10" ' +
-      'end-with-value="20" ' +
-      'autoplay-with-value="true">');
-    var PROCESSED_COLLAPSIBLE = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-collapsible" ' +
-      'heading-with-value="&amp;quot;Test Collapsible&amp;quot;" ' +
-      'content-with-value="&amp;quot;&amp;lt;p&amp;gt;Collapsible content' +
-        '&amp;amp;nbsp;&amp;lt;oppia-noninteractive-math ' +
+      var PROCESSED_MATH = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-math" ' +
+        'raw_latex-with-value="&amp;quot;\\frac{x}{y}&amp;quot;">');
+      var PROCESSED_LINK = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-link" ' +
+        'url-with-value="&amp;quot;https://www.example.com/abc&amp;quot;" ' +
+        'text-with-value="&amp;quot;&amp;quot;" ' +
+        'open_link_in_same_window-with-value="false">');
+      var PROCESSED_VIDEO = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-video" ' +
+        'video_id-with-value="&amp;quot;Ntcw0H0hwPU&amp;quot;" ' +
+        'start-with-value="10" ' +
+        'end-with-value="20" ' +
+        'autoplay-with-value="true">');
+      var PROCESSED_COLLAPSIBLE = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-collapsible" ' +
+        'heading-with-value="&amp;quot;Test Collapsible&amp;quot;" ' +
+        'content-with-value="&amp;quot;&amp;lt;p&amp;gt;Collapsible content' +
+          '&amp;amp;nbsp;&amp;lt;oppia-noninteractive-math ' +
+          'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
+          '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
+          '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
+          '&amp;lt;/p&amp;gt;&amp;quot;">');
+      var PROCESSED_TABS = (
+        '<img src="data:image/png;base64,iVB" ' +
+        'class="oppia-noninteractive-tabs" ' +
+        'tab_contents-with-value="[{&amp;quot;title&amp;quot;:&amp;quot;Tab 1' +
+        '&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p&amp;gt;' +
+        'First Tabs Content&amp;amp;nbsp;&amp;lt;oppia-noninteractive-link ' +
+        'url-with-value=\&amp;quot;&amp;amp;amp;quot;' +
+        'https://www.example.com/abc&amp;amp;amp;quot;\&amp;quot; ' +
+        'text-with-value=\&amp;quot;&amp;amp;amp;quot;&amp;amp;amp;quot;' +
+        '\&amp;quot; open_link_in_same_window-with-value=\&amp;quot;' +
+        'false\&amp;quot;&amp;gt;&amp;lt;/oppia-noninteractive-link&amp;gt;' +
+        '&amp;lt;/p&amp;gt;&amp;quot;},{&amp;quot;title&amp;quot;:&amp;quot;' +
+        'Tab 2&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p' +
+        '&amp;gt;Second Tabs Content&amp;amp;nbsp;&amp;' +
+        'lt;oppia-noninteractive-math ' +
         'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
         '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
         '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
-        '&amp;lt;/p&amp;gt;&amp;quot;">');
-    var PROCESSED_TABS = (
-      '<img src="data:image/png;base64,iVB" ' +
-      'class="oppia-noninteractive-tabs" ' +
-      'tab_contents-with-value="[{&amp;quot;title&amp;quot;:&amp;quot;Tab 1' +
-      '&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p&amp;gt;' +
-      'First Tabs Content&amp;amp;nbsp;&amp;lt;oppia-noninteractive-link ' +
-      'url-with-value=\&amp;quot;&amp;amp;amp;quot;' +
-      'https://www.example.com/abc&amp;amp;amp;quot;\&amp;quot; ' +
-      'text-with-value=\&amp;quot;&amp;amp;amp;quot;&amp;amp;amp;quot;\&amp;' +
-      'quot; open_link_in_same_window-with-value=\&amp;quot;' +
-      'false\&amp;quot;&amp;gt;&amp;lt;/oppia-noninteractive-link&amp;gt;' +
-      '&amp;lt;/p&amp;gt;&amp;quot;},{&amp;quot;title&amp;quot;:&amp;quot;' +
-      'Tab 2&amp;quot;,&amp;quot;content&amp;quot;:&amp;quot;&amp;lt;p' +
-      '&amp;gt;Second Tabs Content&amp;amp;nbsp;&amp;' +
-      'lt;oppia-noninteractive-math ' +
-      'raw_latex-with-value=\&amp;quot;&amp;amp;amp;quot;' +
-      '\\\\frac{x}{y}&amp;amp;amp;quot;\&amp;quot;&amp;gt;' +
-      '&amp;lt;/oppia-noninteractive-math&amp;gt;' +
-      '&amp;lt;/p&amp;gt;&amp;quot;}]">');
+        '&amp;lt;/p&amp;gt;&amp;quot;}]">');
 
-    var RAW_TEXT = '<span style="color: rgb(85, 85, 85);">plain text</span>';
-    var PROCESSED_TEXT = '<span>plain text</span>';
-    var RAW_BOLD_TEXT = '<b style="box-sizing: border-box;">bolded text</b>';
-    var PROCESSED_BOLD_TEXT = '<b>bolded text</b>';
-    var RAW_ITALIC_TEXT = '<i style="font-size: 16px;">italicized text</i>';
-    var PROCESSED_ITALIC_TEXT = '<i>italicized text</i>';
+      var RAW_TEXT = '<span style="color: rgb(85, 85, 85);">plain text</span>';
+      var PROCESSED_TEXT = '<span>plain text</span>';
+      var RAW_BOLD_TEXT = '<b style="box-sizing: border-box;">bolded text</b>';
+      var PROCESSED_BOLD_TEXT = '<b>bolded text</b>';
+      var RAW_ITALIC_TEXT = '<i style="font-size: 16px;">italicized text</i>';
+      var PROCESSED_ITALIC_TEXT = '<i>italicized text</i>';
 
-    // Individual extensions.
-    expect($filter('sanitizeHtmlForRte')(RAW_MATH)).toEqual(PROCESSED_MATH);
-    expect($filter('sanitizeHtmlForRte')(RAW_LINK)).toEqual(PROCESSED_LINK);
-    expect($filter('sanitizeHtmlForRte')(RAW_VIDEO)).toEqual(PROCESSED_VIDEO);
-    expect($filter('sanitizeHtmlForRte')(RAW_COLLAPSIBLE)).toEqual(
-      PROCESSED_COLLAPSIBLE);
-    expect($filter('sanitizeHtmlForRte')(RAW_TABS)).toEqual(PROCESSED_TABS);
+      // Individual extensions.
+      expect($filter('sanitizeHtmlForRte')(RAW_MATH)).toEqual(PROCESSED_MATH);
+      expect($filter('sanitizeHtmlForRte')(RAW_LINK)).toEqual(PROCESSED_LINK);
+      expect($filter('sanitizeHtmlForRte')(RAW_VIDEO)).toEqual(PROCESSED_VIDEO);
+      expect($filter('sanitizeHtmlForRte')(RAW_COLLAPSIBLE)).toEqual(
+        PROCESSED_COLLAPSIBLE);
+      expect($filter('sanitizeHtmlForRte')(RAW_TABS)).toEqual(PROCESSED_TABS);
 
-    // Combinations of extensions and text.
-    expect($filter('sanitizeHtmlForRte')(RAW_MATH + RAW_MATH))
-      .toEqual(PROCESSED_MATH + PROCESSED_MATH);
-    expect($filter('sanitizeHtmlForRte')(RAW_MATH + RAW_TABS + RAW_VIDEO))
-      .toEqual(PROCESSED_MATH + PROCESSED_TABS + PROCESSED_VIDEO);
-    expect($filter('sanitizeHtmlForRte')(
-      RAW_TEXT + RAW_BOLD_TEXT + RAW_MATH + RAW_TABS
-    )).toEqual(
-      PROCESSED_TEXT + PROCESSED_BOLD_TEXT + PROCESSED_MATH + PROCESSED_TABS);
-    expect($filter('sanitizeHtmlForRte')(RAW_TEXT + RAW_MATH + RAW_TEXT))
-      .toEqual(PROCESSED_TEXT + PROCESSED_MATH + PROCESSED_TEXT);
-    expect($filter('sanitizeHtmlForRte')(
-      RAW_TEXT + RAW_MATH + RAW_TEXT + RAW_LINK
-    )).toEqual(
-      PROCESSED_TEXT + PROCESSED_MATH + PROCESSED_TEXT + PROCESSED_LINK);
-    expect($filter('sanitizeHtmlForRte')(
-      RAW_MATH + RAW_TEXT + RAW_LINK + RAW_ITALIC_TEXT
-    )).toEqual(
-      PROCESSED_MATH + PROCESSED_TEXT + PROCESSED_LINK + PROCESSED_ITALIC_TEXT);
+      // Combinations of extensions and text.
+      expect($filter('sanitizeHtmlForRte')(RAW_MATH + RAW_MATH))
+        .toEqual(PROCESSED_MATH + PROCESSED_MATH);
+      expect($filter('sanitizeHtmlForRte')(RAW_MATH + RAW_TABS + RAW_VIDEO))
+        .toEqual(PROCESSED_MATH + PROCESSED_TABS + PROCESSED_VIDEO);
+      expect($filter('sanitizeHtmlForRte')(
+        RAW_TEXT + RAW_BOLD_TEXT + RAW_MATH + RAW_TABS
+      )).toEqual(
+        PROCESSED_TEXT + PROCESSED_BOLD_TEXT + PROCESSED_MATH + PROCESSED_TABS);
+      expect($filter('sanitizeHtmlForRte')(RAW_TEXT + RAW_MATH + RAW_TEXT))
+        .toEqual(PROCESSED_TEXT + PROCESSED_MATH + PROCESSED_TEXT);
+      expect($filter('sanitizeHtmlForRte')(
+        RAW_TEXT + RAW_MATH + RAW_TEXT + RAW_LINK
+      )).toEqual(
+        PROCESSED_TEXT + PROCESSED_MATH + PROCESSED_TEXT + PROCESSED_LINK);
+      expect($filter('sanitizeHtmlForRte')(
+        RAW_MATH + RAW_TEXT + RAW_LINK + RAW_ITALIC_TEXT
+      )).toEqual(
+        PROCESSED_MATH + PROCESSED_TEXT + PROCESSED_LINK +
+        PROCESSED_ITALIC_TEXT);
 
-    // Invalid combinations.
-    expect($filter('sanitizeHtmlForRte')(RAW_MATH + '<span')).toEqual(
-      PROCESSED_MATH);
-    expect($filter('sanitizeHtmlForRte')(
-      '<img src="srcUrl" random-attr="blah-tabs">'
-    )).toEqual('<img src="srcUrl">');
-  }));
+      // Invalid combinations.
+      expect($filter('sanitizeHtmlForRte')(RAW_MATH + '<span')).toEqual(
+        PROCESSED_MATH);
+      expect($filter('sanitizeHtmlForRte')(
+        '<img src="srcUrl" random-attr="blah-tabs">'
+      )).toEqual('<img src="srcUrl">');
+    }
+  ));
 });

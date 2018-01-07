@@ -27,12 +27,19 @@ oppia.constant('LIBRARY_PAGE_MODES', {
 });
 
 oppia.controller('Library', [
-  '$scope', '$http', '$rootScope', '$window', '$timeout', 'i18nIdService',
-  'urlService', 'CATEGORY_LIST', 'searchService', 'windowDimensionsService',
-  'UrlInterpolationService', 'LIBRARY_PAGE_MODES', function(
-      $scope, $http, $rootScope, $window, $timeout, i18nIdService,
-      urlService, CATEGORY_LIST, searchService, windowDimensionsService,
-      UrlInterpolationService, LIBRARY_PAGE_MODES) {
+  '$scope', '$http', '$uibModal', '$rootScope', '$window', '$timeout',
+  'ConstructTranslationIdsService', 'UrlService', 'ALL_CATEGORIES',
+  'SearchService', 'WindowDimensionsService', 'UrlInterpolationService',
+  'LIBRARY_PAGE_MODES', 'LIBRARY_TILE_WIDTH_PX', 'AlertsService',
+  'LearnerDashboardIdsBackendApiService',
+  'LearnerDashboardActivityIdsObjectFactory', 'LearnerPlaylistService',
+  function(
+      $scope, $http, $uibModal, $rootScope, $window, $timeout,
+      ConstructTranslationIdsService, UrlService, ALL_CATEGORIES,
+      SearchService, WindowDimensionsService, UrlInterpolationService,
+      LIBRARY_PAGE_MODES, LIBRARY_TILE_WIDTH_PX, AlertsService,
+      LearnerDashboardIdsBackendApiService,
+      LearnerDashboardActivityIdsObjectFactory, LearnerPlaylistService) {
     $rootScope.loadingMessage = 'I18N_LIBRARY_LOADING';
     var possibleBannerFilenames = [
       'banner1.svg', 'banner2.svg', 'banner3.svg', 'banner4.svg'];
@@ -42,11 +49,10 @@ oppia.controller('Library', [
     $scope.bannerImageFileUrl = UrlInterpolationService.getStaticImageUrl(
       '/library/' + $scope.bannerImageFilename);
 
+    $scope.activeGroupIndex = null;
+
     $scope.pageMode = GLOBALS.PAGE_MODE;
     $scope.LIBRARY_PAGE_MODES = LIBRARY_PAGE_MODES;
-    // Below is the width of each tile (width + margins), which can be found
-    // in components/summary_tile/exploration_summary_tile_directive.html
-    var tileDisplayWidth = 0;
 
     // Keeps track of the index of the left-most visible card of each group.
     $scope.leftmostCardIndices = [];
@@ -79,18 +85,22 @@ oppia.controller('Library', [
 
         $rootScope.loadingMessage = '';
 
-        // Pause is necessary to ensure all elements have loaded, same for
-        // initCarousels.
-        // TODO(sll): On small screens, the tiles do not have a defined width.
-        // The use of 214 here is a hack, and the underlying problem of the
-        // tiles not having a defined width on small screens needs to be fixed.
-        $timeout(function() {
-          tileDisplayWidth = $('exploration-summary-tile').width() || 214;
-        }, 20);
-
         // Initialize the carousel(s) on the library index page.
+        // Pause is necessary to ensure all elements have loaded.
         $timeout(initCarousels, 390);
 
+
+        // Check if actual and expected widths are the same.
+        // If not produce an error that would be caught by e2e tests.
+        $timeout(function () {
+          var actualWidth = $('exploration-summary-tile').width();
+          if (actualWidth && actualWidth != LIBRARY_TILE_WIDTH_PX) {
+            console.error(
+              'The actual width of tile is different than the expected width.' +
+              ' Actual size: ' + actualWidth + ', Expected size: ' +
+              LIBRARY_TILE_WIDTH_PX);
+          }
+        }, 3000);
         // The following initializes the tracker to have all
         // elements flush left.
         // Transforms the group names into translation ids
@@ -100,6 +110,14 @@ oppia.controller('Library', [
         }
       });
     }
+
+    $scope.setActiveGroup = function(groupIndex) {
+      $scope.activeGroupIndex = groupIndex;
+    };
+
+    $scope.clearActiveGroup = function() {
+      $scope.activeGroupIndex = null;
+    };
 
     // If the value below is changed, the following CSS values in oppia.css
     // must be changed:
@@ -116,14 +134,14 @@ oppia.controller('Library', [
       }
 
       var windowWidth = $(window).width() * 0.85;
-      // The number 20 is added to tileDisplayWidth in order to compensate
+      // The number 20 is added to LIBRARY_TILE_WIDTH_PX in order to compensate
       // for padding and margins. 20 is just an arbitrary number.
       $scope.tileDisplayCount = Math.min(
-        Math.floor(windowWidth / (tileDisplayWidth + 20)),
+        Math.floor(windowWidth / (LIBRARY_TILE_WIDTH_PX + 20)),
         MAX_NUM_TILES_PER_ROW);
 
       $('.oppia-library-carousel').css({
-        width: ($scope.tileDisplayCount * tileDisplayWidth) + 'px'
+        width: ($scope.tileDisplayCount * LIBRARY_TILE_WIDTH_PX) + 'px'
       });
 
       // The following determines whether to enable left scroll after resize.
@@ -131,7 +149,7 @@ oppia.controller('Library', [
         var carouselJQuerySelector = (
           '.oppia-library-carousel-tiles:eq(n)'.replace('n', i));
         var carouselScrollPositionPx = $(carouselJQuerySelector).scrollLeft();
-        var index = Math.ceil(carouselScrollPositionPx / tileDisplayWidth);
+        var index = Math.ceil(carouselScrollPositionPx / LIBRARY_TILE_WIDTH_PX);
         $scope.leftmostCardIndices[i] = index;
       }
     };
@@ -144,10 +162,6 @@ oppia.controller('Library', [
       }
       var carouselJQuerySelector = (
         '.oppia-library-carousel-tiles:eq(n)'.replace('n', ind));
-      var leftOverlaySelector =
-        '.oppia-library-carousel-overlay-left:eq(n)'.replace('n', ind);
-      var rightOverlaySelector =
-        '.oppia-library-carousel-overlay-right:eq(n)'.replace('n', ind);
 
       var direction = isLeftScroll ? -1 : 1;
       var carouselScrollPositionPx = $(carouselJQuerySelector).scrollLeft();
@@ -172,7 +186,7 @@ oppia.controller('Library', [
       }
 
       var newScrollPositionPx = carouselScrollPositionPx +
-        ($scope.tileDisplayCount * tileDisplayWidth * direction);
+        ($scope.tileDisplayCount * LIBRARY_TILE_WIDTH_PX * direction);
 
       $(carouselJQuerySelector).animate({
         scrollLeft: newScrollPositionPx
@@ -185,19 +199,6 @@ oppia.controller('Library', [
         complete: function() {
           isAnyCarouselCurrentlyScrolling = false;
         }
-      });
-
-      $(leftOverlaySelector).css({
-        display: 'inline'
-      }).fadeOut({
-        duration: 800,
-        queue: false
-      });
-      $(rightOverlaySelector).css({
-        display: 'inline'
-      }).fadeOut({
-        duration: 800,
-        queue: false
       });
     };
 
@@ -241,7 +242,7 @@ oppia.controller('Library', [
           selectedCategories[categories[i]] = true;
         }
 
-        var targetSearchQueryUrl = searchService.getSearchUrlQueryString(
+        var targetSearchQueryUrl = SearchService.getSearchUrlQueryString(
           '', selectedCategories, {});
         $window.location.href = '/search/find?q=' + targetSearchQueryUrl;
       }
@@ -249,11 +250,11 @@ oppia.controller('Library', [
 
     var libraryWindowCutoffPx = 530;
     $scope.libraryWindowIsNarrow = (
-      windowDimensionsService.getWidth() <= libraryWindowCutoffPx);
+      WindowDimensionsService.getWidth() <= libraryWindowCutoffPx);
 
-    windowDimensionsService.registerOnResizeHook(function() {
+    WindowDimensionsService.registerOnResizeHook(function() {
       $scope.libraryWindowIsNarrow = (
-        windowDimensionsService.getWidth() <= libraryWindowCutoffPx);
+        WindowDimensionsService.getWidth() <= libraryWindowCutoffPx);
       $scope.$apply();
     });
   }

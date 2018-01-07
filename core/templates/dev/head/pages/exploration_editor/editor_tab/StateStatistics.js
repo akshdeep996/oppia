@@ -18,27 +18,20 @@
  */
 
 oppia.controller('StateStatistics', [
-  '$rootScope', '$scope', '$modal', 'explorationData', 'editorContextService',
-  'explorationStatesService', 'trainingDataService',
-  'stateCustomizationArgsService', 'oppiaExplorationHtmlFormatterService',
-  'trainingModalService', 'INTERACTION_SPECS',
+  '$rootScope', '$scope', '$uibModal', 'ExplorationDataService',
+  'EditorStateService', 'explorationStatesService', 'TrainingDataService',
+  'stateCustomizationArgsService', 'ExplorationHtmlFormatterService',
+  'TrainingModalService', 'INTERACTION_SPECS',
   function(
-      $rootScope, $scope, $modal, explorationData, editorContextService,
-      explorationStatesService, trainingDataService,
-      stateCustomizationArgsService, oppiaExplorationHtmlFormatterService,
-      trainingModalService, INTERACTION_SPECS) {
-    $scope.unresolvedAnswersList = [];
+      $rootScope, $scope, $uibModal, ExplorationDataService, EditorStateService,
+      explorationStatesService, TrainingDataService,
+      stateCustomizationArgsService, ExplorationHtmlFormatterService,
+      TrainingModalService, INTERACTION_SPECS) {
     $scope.isInteractionTrainable = false;
+    $scope.SHOW_TRAINABLE_UNRESOLVED_ANSWERS =
+      GLOBALS.SHOW_TRAINABLE_UNRESOLVED_ANSWERS;
 
     $scope.initStateStatistics = function(data) {
-      // Do not show unresolved answers if the interaction has only one possible
-      // answer.
-      $scope.unresolvedAnswers = (
-        (data.interaction.id &&
-         !INTERACTION_SPECS[data.interaction.id].is_linear) ?
-        data.unresolved_answers : {});
-      $scope.generateUnresolvedAnswersList();
-
       $scope.isInteractionTrainable = (
         data.interaction.id &&
         INTERACTION_SPECS[data.interaction.id].is_trainable);
@@ -48,46 +41,31 @@ oppia.controller('StateStatistics', [
       $rootScope.$on('updatedTrainingData', function() {
         $scope.trainingDataButtonContentsList = [];
 
-        var trainingDataAnswers = trainingDataService.getTrainingDataAnswers();
-        var trainingDataCounts = trainingDataService.getTrainingDataCounts();
+        var trainingDataAnswers = TrainingDataService.getTrainingDataAnswers();
+        var trainingDataFrequencies = (
+          TrainingDataService.getTrainingDataFrequencies());
         for (var i = 0; i < trainingDataAnswers.length; i++) {
           var answerHtml = (
-            oppiaExplorationHtmlFormatterService.getShortAnswerHtml(
+            ExplorationHtmlFormatterService.getShortAnswerHtml(
               trainingDataAnswers[i], data.interaction.id,
               stateCustomizationArgsService.savedMemento));
           $scope.trainingDataButtonContentsList.push({
             answerHtml: answerHtml,
-            count: trainingDataCounts[i]
+            frequency: trainingDataFrequencies[i]
           });
         }
       });
     };
 
     $scope.$on('refreshStateEditor', function() {
-      $scope.stateName = editorContextService.getActiveStateName();
+      $scope.stateName = EditorStateService.getActiveStateName();
       var stateData = explorationStatesService.getState($scope.stateName);
       $scope.initStateStatistics(stateData);
     });
 
-    $scope.generateUnresolvedAnswersList = function() {
-      $scope.unresolvedAnswersList = [];
-      for (var answerItem in $scope.unresolvedAnswers) {
-        $scope.unresolvedAnswersList.push({
-          answer: answerItem,
-          count: $scope.unresolvedAnswers[answerItem]
-        });
-      }
-    };
-
-    $scope.deleteUnresolvedAnswer = function(answer) {
-      $scope.unresolvedAnswers[answer] = 0;
-      explorationData.resolveAnswers($scope.stateName, [answer]);
-      $scope.generateUnresolvedAnswersList();
-    };
-
     $scope.openTrainUnresolvedAnswerModal = function(trainingDataIndex) {
-      return trainingModalService.openTrainUnresolvedAnswerModal(
-        trainingDataService.getTrainingDataAnswers()[trainingDataIndex], true);
+      return TrainingModalService.openTrainUnresolvedAnswerModal(
+        TrainingDataService.getTrainingDataAnswers()[trainingDataIndex], true);
     };
   }
 ]);

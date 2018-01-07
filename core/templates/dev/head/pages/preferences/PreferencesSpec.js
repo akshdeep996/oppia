@@ -38,7 +38,7 @@ describe('Preferences Controller', function() {
         $scope: scope,
         $http: $http,
         $rootScope: $rootScope,
-        alertsService: mockAlertsService
+        AlertsService: mockAlertsService
       });
     }));
 
@@ -49,7 +49,8 @@ describe('Preferences Controller', function() {
       });
 
     it('should show that feedback message notifications checkbox is true' +
-      'by default', function() {
+      'by default',
+      function() {
         $httpBackend.flush();
         expect(scope.canReceiveFeedbackMessageEmail).toBe(true);
       });

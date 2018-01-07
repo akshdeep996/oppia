@@ -21,6 +21,7 @@ oppia.controller('Splash', [
   'UrlInterpolationService',
   function($scope, $timeout, $window, siteAnalyticsService,
     UrlInterpolationService) {
+    $scope.userIsLoggedIn = GLOBALS.userIsLoggedIn;
     $scope.getStaticImageUrl = UrlInterpolationService.getStaticImageUrl;
     $scope.getStaticSubjectImageUrl = function(subjectName) {
       return UrlInterpolationService.getStaticImageUrl('/subjects/' +
@@ -47,7 +48,7 @@ oppia.controller('Splash', [
     $scope.onClickCreateExplorationButton = function() {
       siteAnalyticsService.registerClickCreateExplorationButtonEvent();
       $timeout(function() {
-        $window.location = '/dashboard?mode=create';
+        $window.location = '/creator_dashboard?mode=create';
       }, 150);
       return false;
     };

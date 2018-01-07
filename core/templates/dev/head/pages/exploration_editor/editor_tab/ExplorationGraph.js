@@ -17,21 +17,21 @@
  */
 
 oppia.controller('ExplorationGraph', [
-  '$scope', '$modal', 'editorContextService', 'alertsService',
-  'explorationStatesService', 'editabilityService', 'routerService',
-  'graphDataService',
+  '$scope', '$uibModal', 'EditorStateService', 'AlertsService',
+  'explorationStatesService', 'EditabilityService', 'RouterService',
+  'graphDataService', 'UrlInterpolationService',
   function(
-      $scope, $modal, editorContextService, alertsService,
-      explorationStatesService, editabilityService, routerService,
-      graphDataService) {
+    $scope, $uibModal, EditorStateService, AlertsService,
+    explorationStatesService, EditabilityService, RouterService,
+    graphDataService, UrlInterpolationService) {
     $scope.getGraphData = graphDataService.getGraphData;
-    $scope.isEditable = editabilityService.isEditable;
+    $scope.isEditable = EditabilityService.isEditable;
 
     // We hide the graph at the outset in order not to confuse new exploration
     // creators.
     $scope.isGraphShown = function() {
-      var states = explorationStatesService.getStates();
-      return Boolean(states && Object.keys(states).length > 1);
+      return Boolean(explorationStatesService.isInitialized() &&
+        explorationStatesService.getStateNames().length > 1);
     };
 
     $scope.deleteState = function(deleteStateName) {
@@ -39,18 +39,20 @@ oppia.controller('ExplorationGraph', [
     };
 
     $scope.onClickStateInMinimap = function(stateName) {
-      routerService.navigateToMainTab(stateName);
+      RouterService.navigateToMainTab(stateName);
     };
 
     $scope.getActiveStateName = function() {
-      return editorContextService.getActiveStateName();
+      return EditorStateService.getActiveStateName();
     };
 
     $scope.openStateGraphModal = function() {
-      alertsService.clearWarnings();
+      AlertsService.clearWarnings();
 
-      $modal.open({
-        templateUrl: 'modals/stateGraph',
+      $uibModal.open({
+        templateUrl: UrlInterpolationService.getDirectiveTemplateUrl(
+          '/pages/exploration_editor/editor_tab/' +
+          'exploration_graph_modal_directive.html'),
         backdrop: true,
         resolve: {
           isEditable: function() {
@@ -59,31 +61,31 @@ oppia.controller('ExplorationGraph', [
         },
         windowClass: 'oppia-large-modal-window',
         controller: [
-          '$scope', '$modalInstance', 'editorContextService',
+          '$scope', '$uibModalInstance', 'EditorStateService',
           'graphDataService', 'isEditable',
-          function($scope, $modalInstance, editorContextService,
+          function($scope, $uibModalInstance, EditorStateService,
                    graphDataService, isEditable) {
-            $scope.currentStateName = editorContextService.getActiveStateName();
+            $scope.currentStateName = EditorStateService.getActiveStateName();
             $scope.graphData = graphDataService.getGraphData();
             $scope.isEditable = isEditable;
 
             $scope.deleteState = function(stateName) {
-              $modalInstance.close({
+              $uibModalInstance.close({
                 action: 'delete',
                 stateName: stateName
               });
             };
 
             $scope.selectState = function(stateName) {
-              $modalInstance.close({
+              $uibModalInstance.close({
                 action: 'navigate',
                 stateName: stateName
               });
             };
 
             $scope.cancel = function() {
-              $modalInstance.dismiss('cancel');
-              alertsService.clearWarnings();
+              $uibModalInstance.dismiss('cancel');
+              AlertsService.clearWarnings();
             };
           }
         ]

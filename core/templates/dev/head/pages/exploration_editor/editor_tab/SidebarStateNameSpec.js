@@ -37,7 +37,7 @@ describe('Sidebar state name controller', function() {
         autosaveChangeList: function() {}
       };
       module(function($provide) {
-        $provide.value('explorationData', mockExplorationData);
+        $provide.value('ExplorationDataService', mockExplorationData);
       });
       spyOn(mockExplorationData, 'autosaveChangeList');
     });
@@ -47,8 +47,8 @@ describe('Sidebar state name controller', function() {
       scope = $rootScope.$new();
       filter = $filter;
       rootScope = $rootScope;
-      ecs = $injector.get('editorContextService');
-      fs = $injector.get('focusService');
+      ecs = $injector.get('EditorStateService');
+      fs = $injector.get('FocusManagerService');
       ess = $injector.get('explorationStatesService');
       $httpBackend = $injector.get('$httpBackend');
 
@@ -56,10 +56,10 @@ describe('Sidebar state name controller', function() {
 
       ess.init({
         'First State': {
-          content: [{
-            type: 'text',
-            value: 'First State Content'
-          }],
+          content: {
+            html: 'First State Content',
+            audio_translations: {}
+          },
           interaction: {
             answer_groups: [],
             default_outcome: {
@@ -67,15 +67,15 @@ describe('Sidebar state name controller', function() {
               feedback: [],
               param_changes: []
             },
-            fallbacks: []
+            hints: []
           },
           param_changes: []
         },
         'Second State': {
-          content: [{
-            type: 'text',
-            value: 'Second State Content'
-          }],
+          content: {
+            html: 'Second State Content',
+            audio_translations: {}
+          },
           interaction: {
             answer_groups: [],
             default_outcome: {
@@ -83,15 +83,15 @@ describe('Sidebar state name controller', function() {
               feedback: [],
               param_changes: []
             },
-            fallbacks: []
+            hints: []
           },
           param_changes: []
         },
         'Third State': {
-          content: [{
-            type: 'text',
-            value: 'This is some content.'
-          }],
+          content: {
+            html: 'This is some content.',
+            audio_translations: {}
+          },
           interaction: {
             answer_groups: [],
             default_outcome: {
@@ -99,7 +99,7 @@ describe('Sidebar state name controller', function() {
               feedback: [],
               param_changes: []
             },
-            fallbacks: []
+            hints: []
           },
           param_changes: [{
             name: 'comparison',
@@ -116,15 +116,15 @@ describe('Sidebar state name controller', function() {
         $scope: scope,
         $filter: filter,
         $rootScope: rootScope,
-        editabilityService: {
+        EditabilityService: {
           isEditable: function() {
             return true;
           }
         },
-        editorContextService: ecs,
-        focusService: fs,
+        EditorStateService: ecs,
+        FocusManagerService: fs,
         explorationStatesService: ess,
-        routerService: {}
+        RouterService: {}
       });
     }));
 

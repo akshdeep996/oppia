@@ -188,12 +188,7 @@ oppia.factory('ExplorationDiffService', [
           } else if (
               change.cmd !== 'migrate_states_schema_to_latest_version' &&
               change.cmd !== 'AUTO_revert_version_number' &&
-              change.cmd !== 'edit_exploration_property' &&
-              change.cmd !== 'add_gadget' &&
-              change.cmd !== 'rename_gadget' &&
-              change.cmd !== 'delete_gadget' &&
-              change.cmd !== 'edit_gadget_property') {
-            // TODO(wxy): add a visualization for gadgets.
+              change.cmd !== 'edit_exploration_property') {
             throw new Error('Invalid change command: ' + change.cmd);
           }
         });
@@ -227,13 +222,13 @@ oppia.factory('ExplorationDiffService', [
       }
       for (var stateName in states) {
         var interaction = states[stateName].interaction;
-        var groups = interaction.answer_groups;
+        var groups = interaction.answerGroups;
         for (var h = 0; h < groups.length; h++) {
           var dest = groups[h].outcome.dest;
           adjMatrix[stateIds[stateName]][stateIds[dest]] = true;
         }
-        if (interaction.default_outcome) {
-          var defaultDest = interaction.default_outcome.dest;
+        if (interaction.defaultOutcome) {
+          var defaultDest = interaction.defaultOutcome.dest;
           adjMatrix[stateIds[stateName]][stateIds[defaultDest]] = true;
         }
       }
@@ -272,7 +267,10 @@ oppia.factory('ExplorationDiffService', [
 
     return {
       getDiffGraphData: function(oldStates, newStates, changeListData) {
-        return _getDiffGraphData(oldStates, newStates, changeListData);
+        return _getDiffGraphData(
+          oldStates,
+          newStates,
+          changeListData);
       }
     };
   }

@@ -17,297 +17,369 @@
  */
 
 describe('Answer classification service with string classifier disabled',
-    function() {
-  beforeEach(module('oppia'));
+  function() {
+    beforeEach(module('oppia'));
 
-  beforeEach(function() {
-    module(function($provide) {
-      $provide.constant('INTERACTION_SPECS', {
-        RuleTest: {
-          is_string_classifier_trainable: false
-        }
+    beforeEach(function() {
+      module(function($provide) {
+        $provide.constant('INTERACTION_SPECS', {
+          RuleTest: {
+            is_trainable: false
+          }
+        });
+        $provide.constant('ENABLE_ML_CLASSIFIERS', false);
       });
-      $provide.constant('ENABLE_STRING_CLASSIFIER', false);
     });
-  });
 
-  beforeEach(module('oppia', GLOBALS.TRANSLATOR_PROVIDER_FOR_TESTS));
+    beforeEach(module('oppia', GLOBALS.TRANSLATOR_PROVIDER_FOR_TESTS));
 
-  var acs, $httpBackend, successHandler, failHandler, $rootScope, state;
-  beforeEach(inject(function($injector) {
-    acs = $injector.get('AnswerClassificationService');
-    sof = $injector.get('StateObjectFactory');
-    $httpBackend = $injector.get('$httpBackend');
-    $rootScope = $injector.get('$rootScope');
-    successHandler = jasmine.createSpy('success');
-    failHandler = jasmine.createSpy('fail');
+    var EXPLICIT_CLASSIFICATION, DEFAULT_OUTCOME_CLASSIFICATION;
+    var acs, sof, oof, acrof, stateName, state;
+    beforeEach(inject(function($injector) {
+      acs = $injector.get('AnswerClassificationService');
+      sof = $injector.get('StateObjectFactory');
+      oof = $injector.get('OutcomeObjectFactory');
+      acrof = $injector.get('AnswerClassificationResultObjectFactory');
+      EXPLICIT_CLASSIFICATION = $injector.get('EXPLICIT_CLASSIFICATION');
+      DEFAULT_OUTCOME_CLASSIFICATION = $injector.get(
+        'DEFAULT_OUTCOME_CLASSIFICATION');
 
-    state = sof.create('stateName', {
-      content: [{
-        type: 'text',
-        value: 'content'
-      }],
-      interaction: {
-        id: 'RuleTest',
-        answer_groups: [{
-          outcome: 'outcome 1',
-          rule_specs: [{
-            inputs: {
-              x: 10
+      stateName = 'stateName';
+      state = sof.createFromBackendDict(stateName, {
+        content: {
+          html: 'content',
+          audio_translations: {}
+        },
+        interaction: {
+          id: 'RuleTest',
+          answer_groups: [{
+            outcome: {
+              dest: 'outcome 1',
+              feedback: {
+                html: '',
+                audio_translations: {}
+              },
+              labelled_as_correct: false,
+              param_changes: [],
+              refresher_exploration_id: null
             },
-            rule_type: 'Equals'
-          }]
-        }, {
-          outcome: 'outcome 2',
-          rule_specs: [{
-            inputs: {
-              x: 5
-            },
-            rule_type: 'Equals'
+            rule_specs: [{
+              inputs: {
+                x: 10
+              },
+              rule_type: 'Equals'
+            }]
           }, {
-            inputs: {
-              x: 7
+            outcome: {
+              dest: 'outcome 2',
+              feedback: {
+                html: '',
+                audio_translations: {}
+              },
+              labelled_as_correct: false,
+              param_changes: [],
+              refresher_exploration_id: null
             },
-            rule_type: 'NotEquals'
-          }, {
-            inputs: {
-              x: 6
+            rule_specs: [{
+              inputs: {
+                x: 5
+              },
+              rule_type: 'Equals'
+            }, {
+              inputs: {
+                x: 7
+              },
+              rule_type: 'NotEquals'
+            }, {
+              inputs: {
+                x: 6
+              },
+              rule_type: 'Equals'
+            }, {
+              inputs: {
+                x: 7
+              },
+              rule_type: 'FuzzyMatches'
+            }]
+          }],
+          default_outcome: {
+            dest: 'default',
+            feedback: {
+              html: '',
+              audio_translations: {}
             },
-            rule_type: 'Equals'
-          }, {
-            inputs: {
-              x: 7
-            },
-            rule_type: 'FuzzyMatches'
-          }]
-        }],
-        default_outcome: 'default'
+            labelled_as_correct: false,
+            param_changes: [],
+            refresher_exploration_id: null
+          },
+          hints: []
+        },
+        param_changes: []
+      });
+    }));
+
+    var explorationId = 'exploration';
+
+    var rules = {
+      Equals: function(answer, inputs) {
+        return inputs.x === answer;
       },
-      param_changes: []
+      NotEquals: function(answer, inputs) {
+        return inputs.x !== answer;
+      }
+    };
+
+    it('should fail if no frontend rules are provided', function() {
+      expect(function() {
+        acs.getMatchingClassificationResult(explorationId, stateName, state, 0)
+      }).toThrow();
     });
-  }));
 
-  afterEach(function() {
-    $httpBackend.verifyNoOutstandingExpectation();
-    $httpBackend.verifyNoOutstandingRequest();
-  });
+    it('should return the first matching answer group and first matching rule' +
+       'spec', function() {
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 10, rules)
+      ).toEqual(acrof.createNew(
+        oof.createNew('outcome 1', '', []), 0, 0, EXPLICIT_CLASSIFICATION
+      ));
 
-  var explorationId = 'exploration';
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 5, rules)
+      ).toEqual(acrof.createNew(
+        oof.createNew('outcome 2', '', []), 1, 0, EXPLICIT_CLASSIFICATION
+      ));
 
-  var rules = {
-    Equals: function(answer, inputs) {
-      return inputs.x === answer;
-    },
-    NotEquals: function(answer, inputs) {
-      return inputs.x !== answer;
-    }
-  };
-
-  it('should fail if no frontend rules are provided', function() {
-    acs.getMatchingClassificationResult(explorationId, state, 0, false).then(
-      successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).not.toHaveBeenCalled();
-    expect(failHandler).toHaveBeenCalled();
-  });
-
-  it('should return the first matching answer group and first matching rule' +
-     'spec', function() {
-    acs.getMatchingClassificationResult(
-      explorationId, state, 10, false, rules).then(successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).toHaveBeenCalledWith({
-      outcome: 'outcome 1',
-      answerGroupIndex: 0,
-      ruleSpecIndex: 0
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 6, rules)
+      ).toEqual(acrof.createNew(
+        oof.createNew('outcome 2', '', []), 1, 1, EXPLICIT_CLASSIFICATION
+      ));
     });
-    expect(failHandler).not.toHaveBeenCalled();
 
-    acs.getMatchingClassificationResult(
-      explorationId, state, 5, false, rules).then(successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).toHaveBeenCalledWith({
-      outcome: 'outcome 2',
-      answerGroupIndex: 1,
-      ruleSpecIndex: 0
+    it('should return the default rule if no answer group matches', function() {
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 7, rules)
+      ).toEqual(acrof.createNew(
+        oof.createNew('default', '', []), 2, 0, DEFAULT_OUTCOME_CLASSIFICATION
+      ));
     });
-    expect(failHandler).not.toHaveBeenCalled();
 
-    acs.getMatchingClassificationResult(
-      explorationId, state, 6, false, rules).then(successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).toHaveBeenCalledWith({
-      outcome: 'outcome 2',
-      answerGroupIndex: 1,
-      ruleSpecIndex: 1
-    });
-    expect(failHandler).not.toHaveBeenCalled();
-  });
-
-  it('should return the default rule if no answer group matches', function() {
-    acs.getMatchingClassificationResult(
-      explorationId, state, 7, false, rules).then(successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).toHaveBeenCalledWith({
-      outcome: 'default',
-      answerGroupIndex: 2,
-      ruleSpecIndex: 0
-    });
-    expect(failHandler).not.toHaveBeenCalled();
-  });
-
-  it('should fail if no answer group matches and no default rule is ' +
-     'provided', function() {
-    var state2 = sof.create('stateName', {
-      content: [{
-        type: 'text',
-        value: 'content'
-      }],
-      interaction: {
-        id: 'RuleTest',
-        answer_groups: [{
-          outcome: 'outcome 1',
-          rule_specs: [{
-            inputs: {
-              x: 10
+    it('should fail if no answer group matches and no default rule is ' +
+       'provided', function() {
+      var state2 = sof.createFromBackendDict(stateName, {
+        content: {
+          html: 'content',
+          audio_translations: {}
+        },
+        interaction: {
+          id: 'RuleTest',
+          answer_groups: [{
+            outcome: {
+              dest: 'outcome 1',
+              feedback: {
+                html: '',
+                audio_translations: {}
+              },
+              labelled_as_correct: false,
+              param_changes: [],
+              refresher_exploration_id: null
             },
-            rule_type: 'Equals'
-          }]
-        }]
-      },
-      param_changes: []
-    });
+            rule_specs: [{
+              inputs: {
+                x: 10
+              },
+              rule_type: 'Equals'
+            }]
+          }],
+          default_outcome: {
+            dest: 'default',
+            feedback: {
+              html: '',
+              audio_translations: {}
+            },
+            labelled_as_correct: false,
+            param_changes: [],
+            refresher_exploration_id: null
+          },
+          hints: []
+        },
+        param_changes: []
+      });
 
-    acs.getMatchingClassificationResult(explorationId, state, 0, false).then(
-      successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).not.toHaveBeenCalled();
-    expect(failHandler).toHaveBeenCalled();
+      expect(function() {
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 0)
+      }).toThrow();
+    });
   });
-});
 
 describe('Answer classification service with string classifier enabled',
-    function() {
-  beforeEach(module('oppia'));
+  function() {
+    beforeEach(module('oppia'));
 
-  beforeEach(function() {
-    module(function($provide) {
-      $provide.constant('INTERACTION_SPECS', {
-        TrainableInteraction: {
-          is_string_classifier_trainable: true
+    beforeEach(function() {
+      module(function($provide) {
+        $provide.constant('INTERACTION_SPECS', {
+          TrainableInteraction: {
+            is_trainable: true
+          },
+          UntrainableInteraction: {
+            is_trainable: false
+          }
+        });
+        $provide.constant('ENABLE_ML_CLASSIFIERS', true);
+        $provide.factory('PredictionSampleService', [function() {
+          return {
+            predict: function(classifierData, answer) {
+              return 1;
+            }
+          };
+        }]);
+      });
+    });
+
+    beforeEach(module('oppia', GLOBALS.TRANSLATOR_PROVIDER_FOR_TESTS));
+
+    var EXPLICIT_CLASSIFICATION, DEFAULT_OUTCOME_CLASSIFICATION,
+      STATISTICAL_CLASSIFICATION;
+    var acs, scms, sof, oof, acrof, $stateName, state, state2,
+      registryService, stateClassifierMapping;
+    beforeEach(inject(function($injector) {
+      acs = $injector.get('AnswerClassificationService');
+      scms = $injector.get('StateClassifierMappingService');
+      sof = $injector.get('StateObjectFactory');
+      oof = $injector.get('OutcomeObjectFactory');
+      acrof = $injector.get('AnswerClassificationResultObjectFactory');
+      EXPLICIT_CLASSIFICATION = $injector.get('EXPLICIT_CLASSIFICATION');
+      DEFAULT_OUTCOME_CLASSIFICATION = $injector.get(
+        'DEFAULT_OUTCOME_CLASSIFICATION');
+      STATISTICAL_CLASSIFICATION = $injector.get('STATISTICAL_CLASSIFICATION');
+      registryService = $injector.get('PredictionAlgorithmRegistryService');
+
+      stateName = 'stateName';
+      state = sof.createFromBackendDict(stateName, {
+        content: {
+          html: 'content',
+          audio_translations: {}
         },
-        UntrainableInteraction: {
-          is_string_classifier_trainable: false
+        interaction: {
+          id: 'TrainableInteraction',
+          answer_groups: [{
+            outcome: {
+              dest: 'outcome 1',
+              feedback: {
+                html: '',
+                audio_translations: {}
+              },
+              labelled_as_correct: false,
+              param_changes: [],
+              refresher_exploration_id: null
+            },
+            rule_specs: [{
+              inputs: {
+                x: 10
+              },
+              rule_type: 'Equals'
+            }]
+          }, {
+            outcome: {
+              dest: 'outcome 2',
+              feedback: {
+                html: '',
+                audio_translations: {}
+              },
+              labelled_as_correct: false,
+              param_changes: [],
+              refresher_exploration_id: null
+            },
+            rule_specs: [{
+              inputs: {
+                x: 5
+              },
+              rule_type: 'Equals'
+            }, {
+              inputs: {
+                x: 7
+              },
+              rule_type: 'Equals'
+            }, {
+              inputs: {
+                x: 7
+              },
+              rule_type: 'FuzzyMatches'
+            }]
+          }],
+          default_outcome: {
+            dest: 'default',
+            feedback: {
+              html: '',
+              audio_translations: {}
+            },
+            labelled_as_correct: false,
+            param_changes: [],
+            refresher_exploration_id: null
+          },
+          hints: []
+        },
+        param_changes: []
+      });
+
+      stateClassifierMapping = {
+        stateName: {
+          algorithm_id: 'LDAStringClassifier',
+          classifier_data: {},
+          data_schema_version: 1
+        }
+      };
+      scms.init(stateClassifierMapping);
+
+      registryService.setMapping({
+        LDAStringClassifier: {
+          v1: 'PredictionSampleService'
         }
       });
-      $provide.constant('ENABLE_STRING_CLASSIFIER', true);
-    });
-  });
 
-  beforeEach(module('oppia', GLOBALS.TRANSLATOR_PROVIDER_FOR_TESTS));
+      state2 = angular.copy(state);
+      state2.interaction.id = 'UntrainableInteraction';
+    }));
 
-  var acs, $httpBackend, successHandler, failHandler, $rootScope, state, state2;
-  beforeEach(inject(function($injector) {
-    acs = $injector.get('AnswerClassificationService');
-    sof = $injector.get('StateObjectFactory');
-    $httpBackend = $injector.get('$httpBackend');
-    $rootScope = $injector.get('$rootScope');
-    successHandler = jasmine.createSpy('success');
-    failHandler = jasmine.createSpy('fail');
+    var explorationId = 'exploration';
 
-    state = sof.create('stateName', {
-      content: [{
-        type: 'text',
-        value: 'content'
-      }],
-      interaction: {
-        id: 'TrainableInteraction',
-        answer_groups: [{
-          outcome: 'outcome 1',
-          rule_specs: [{
-            inputs: {
-              x: 10
-            },
-            rule_type: 'Equals'
-          }]
-        }, {
-          outcome: 'outcome 2',
-          rule_specs: [{
-            inputs: {
-              x: 5
-            },
-            rule_type: 'Equals'
-          }, {
-            inputs: {
-              x: 7
-            },
-            rule_type: 'Equals'
-          }, {
-            inputs: {
-              x: 7
-            },
-            rule_type: 'FuzzyMatches'
-          }]
-        }],
-        default_outcome: 'default'
+    var rules = {
+      Equals: function(answer, inputs) {
+        return inputs.x === answer;
       },
-      param_changes: []
+      NotEquals: function(answer, inputs) {
+        return inputs.x !== answer;
+      }
+    };
+
+    it('should query the prediction service if no answer group matches and ' +
+       'interaction is trainable', function() {
+      // The prediction result is the same as default until there is a mapping
+      // in PredictionAlgorithmRegistryService.
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state, 0, rules)
+      ).toEqual(
+        acrof.createNew(
+          state.interaction.answerGroups[1].outcome, 1, 2,
+          STATISTICAL_CLASSIFICATION)
+      );
     });
 
-    state2 = angular.copy(state);
-    state2.interaction.id = 'UntrainableInteraction';
-  }));
-
-  afterEach(function() {
-    $httpBackend.verifyNoOutstandingExpectation();
-    $httpBackend.verifyNoOutstandingRequest();
-  });
-
-  var explorationId = 'exploration';
-
-  var rules = {
-    Equals: function(answer, inputs) {
-      return inputs.x === answer;
-    },
-    NotEquals: function(answer, inputs) {
-      return inputs.x !== answer;
-    }
-  };
-
-  it('should query the backend if no answer group matches and interaction ' +
-     'is trainable', function() {
-    var backendClassifiedOutcome = {
-      outcome: 'outcome',
-      answer_group_index: 0,
-      rule_spec_index: 0
-    };
-    var expectedClassificationResult = {
-      outcome: 'outcome',
-      answerGroupIndex: 0,
-      ruleSpecIndex: 0
-    };
-    $httpBackend.expectPOST(
-      '/explorehandler/classify/' + explorationId).respond(
-      backendClassifiedOutcome);
-    acs.getMatchingClassificationResult(explorationId, state, 0, false, rules).
-      then(successHandler, failHandler);
-    $rootScope.$apply();
-    $httpBackend.flush();
-
-    expect(successHandler).toHaveBeenCalledWith(expectedClassificationResult);
-    expect(failHandler).not.toHaveBeenCalled();
-  });
-
-  it('should return the default rule if no answer group matches and ' +
-     'interaction is not trainable', function() {
-    acs.getMatchingClassificationResult(
-      explorationId, state2, 0, false, rules).then(successHandler, failHandler);
-    $rootScope.$digest();
-    expect(successHandler).toHaveBeenCalledWith({
-      outcome: 'default',
-      answerGroupIndex: 2,
-      ruleSpecIndex: 0
+    it('should return the default rule if no answer group matches and ' +
+       'interaction is not trainable', function() {
+      expect(
+        acs.getMatchingClassificationResult(
+          explorationId, stateName, state2, 0, rules)
+      ).toEqual(acrof.createNew(
+        oof.createNew('default', '', []), 2, 0, DEFAULT_OUTCOME_CLASSIFICATION
+      ));
     });
-    expect(failHandler).not.toHaveBeenCalled();
-  });
-});
+  }
+);
